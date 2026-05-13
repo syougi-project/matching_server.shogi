@@ -26,6 +26,7 @@
 - `bff.shogi`
   - 対戦メタデータの永続化
   - 対戦履歴・勝敗結果の管理
+  - 対局開始前の battle setup 検証・保存
   - 将来的なプロフィールや戦績表示用の参照元
 
 ## High-Level Flow
@@ -33,15 +34,17 @@
 2. クライアントが `enter_queue` を送る
 3. `matching_server.shogi` が接続情報と待機要求を DynamoDB に記録し、即時に待機受付応答を返す
 4. 別のマッチング処理がレート帯バケット単位で待機者を探索し、排他的に 2 名を確保する
-5. 対戦 ID を発行し、対局状態を作成する
-6. `matching_server.shogi` が対局開始を確定し、両クライアントへ `match_found` / `game_started` を配信する
-7. 開始イベントを非同期で `bff.shogi` に通知し、RDB に対戦メタデータを反映する
-8. 対局中は各操作を WebSocket メッセージとして受信し、`version` 条件付きで検証してから状態更新する
-9. 切断時は即終了せず、再接続猶予内での復帰を許容する
-10. 終局時に終了イベントを非同期で `bff.shogi` に通知する
+5. `matching_server.shogi` が `bff.shogi` から battle setup と piece catalog を取得する
+6. `matching_server.shogi` が rule snapshot と初期局面を確定し、対戦 ID を発行して対局状態を作成する
+7. `matching_server.shogi` が対局開始を確定し、両クライアントへ `match_found` / `game_started` を配信する
+8. 開始イベントを非同期で `bff.shogi` に通知し、RDB に対戦メタデータを反映する
+9. 対局中は各操作を WebSocket メッセージとして受信し、`version` 条件付きで検証してから状態更新する
+10. 切断時は即終了せず、再接続猶予内での復帰を許容する
+11. 終局時に終了イベントを非同期で `bff.shogi` に通知する
 
 ## Authoritative State Policy
 - 盤面、手番、持ち駒、消費時間、対局状態はサーバーが正本を持つ
+- 対局開始前の盤面編集は `app.shogi` / `bff.shogi` で行うが、開始時に採用する初期局面の最終確定はサーバーが行う
 - クライアントは表示と入力のみを担当し、状態確定はサーバー応答を待つ
 - 各着手要求はサーバーで以下を検証する
   - 対局 ID が有効か
@@ -82,6 +85,7 @@
 - `src/integrations`
   - `bff.shogi` 通知クライアント
   - 非同期イベント配送
+  - battle setup / piece catalog fetch client
 - `src/shared-shogi-core` or external shared package
   - `app.shogi` と共有する純粋な将棋ルールロジック候補
 - `src/shared`
@@ -92,6 +96,7 @@
 - `enter_queue` は待機登録だけを担当し、マッチング成立判定は非同期 worker に分離する
 - マッチングキューは DynamoDB を使い、同時マッチング競合は条件付き更新または `TransactWriteItems` で抑止する
 - ランク近傍探索は厳密ソートではなく、初期はレート帯バケット方式で実装する
+- 対局前の盤面編集データは `bff.shogi` が検証・保存し、`matching_server.shogi` は match 開始時に取得して最終採用する
 - 対局更新は `version` を用いた条件付き更新で順序競合を抑止する
 - 対局履歴の完全な参照系は `bff.shogi` に寄せるが、通知はクリティカルパスに置かず非同期再試行可能なイベントにする
 - モバイル切断を前提に、即 `aborted` ではなく再接続猶予を設ける
@@ -104,4 +109,5 @@
 - 持ち時間を初期リリースで入れるか、無制限にするか
 - 再接続猶予を 30 秒にするか 60 秒にするか
 - `bff.shogi` 通知の非同期配送に何を使うか
+- battle setup の lock / consume をどのタイミングで行うか
 - 将棋ロジック共有を monorepo package にするか、別 repo package にするか

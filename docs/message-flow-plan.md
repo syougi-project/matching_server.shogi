@@ -177,10 +177,32 @@ Server behavior:
 4. 非同期マッチング worker が `waiting` エントリ群から候補探索する
 5. まず同一 `ratingBucket` を探索し、いなければ隣接バケットへ段階的に広げる
 6. `TransactWriteItems` または条件付き更新で 2 人を `matching` に確保する
-7. 対局セッションを作成する
-8. queue status を `matched` に更新する
-9. 両者に `match_found` と `game_started` を送る
-10. 開始イベントを非同期で `bff.shogi` 通知キューへ積む
+7. 各プレイヤーに紐づく battle setup ID を解決する
+8. `bff.shogi` から battle setup と piece catalog を取得する
+9. `matching_server.shogi` が rule snapshot と初期局面を最終検証して対局セッションを作成する
+10. queue status を `matched` に更新する
+11. 両者に `match_found` と `game_started` を送る
+12. 開始イベントを非同期で `bff.shogi` 通知キューへ積む
+
+## Pre-Match Battle Setup Flow
+1. `app.shogi` でユーザーが所持駒を使って盤面を編集する
+2. `app.shogi` が `bff.shogi` へ battle setup を保存する
+3. `bff.shogi` が所持駒と配置制約を検証し、`validated` setup を保持する
+4. queue entry または match start request に battle setup ID を紐づける
+5. match 成立後に `matching_server.shogi` が `bff.shogi` から battle setup を取得する
+6. `matching_server.shogi` が piece catalog / skill definitions と組み合わせて rule snapshot を作成する
+7. `matching_server.shogi` が初期局面を最終検証し、match session の開始状態として採用する
+
+## BFF Fetch Flow At Match Start
+- `matching_server.shogi` -> `bff.shogi`
+- fetch piece catalog:
+  - `GET /api/v1/pieces/catalog`
+- fetch battle setup:
+  - `GET /api/v1/online-match/battle-setup/:battleSetupId`
+- optional lock:
+  - `POST /api/v1/online-match/battle-setup/:battleSetupId/lock`
+
+The returned setup is not blindly trusted. `matching_server.shogi` re-validates the final start state before creating the authoritative match session.
 
 ## Disconnect Handling
 - 切断時は `ws_connections` を切断状態にする
