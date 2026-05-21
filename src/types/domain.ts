@@ -1,3 +1,5 @@
+import type { MatchingCanonicalState } from '@/types/canonical-state';
+
 export type ConnectionStatus = 'connected' | 'disconnected';
 
 export type QueueStatus = 'waiting' | 'matching' | 'matched' | 'cancelled' | 'expired';
@@ -110,6 +112,8 @@ export type GameSnapshot = {
   moveCount: number;
   version: number;
   lastMove?: MovePayload;
+  lastSkillTriggered?: boolean;
+  canonicalState?: MatchingCanonicalState;
 };
 
 export type ConnectionRecord = {

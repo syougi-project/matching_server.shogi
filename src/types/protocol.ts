@@ -1,3 +1,4 @@
+import type { MatchingCanonicalState } from '@/types/canonical-state';
 import type { MovePayload, PlayerSide } from '@/types/domain';
 
 export type EnterQueueMessage = {
@@ -64,6 +65,7 @@ export type WebSocketServerMessage =
         board: Record<string, string>;
         hands: Record<PlayerSide, Record<string, number>>;
         version: number;
+        canonicalState?: MatchingCanonicalState;
       };
     }
   | {
@@ -74,6 +76,8 @@ export type WebSocketServerMessage =
       board: Record<string, string>;
       hands: Record<PlayerSide, Record<string, number>>;
       lastMove?: MovePayload;
+      lastSkillTriggered?: boolean;
+      canonicalState?: MatchingCanonicalState;
     }
   | {
       type: 'game_finished';

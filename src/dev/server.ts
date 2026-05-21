@@ -3,6 +3,7 @@ import { createServerContext } from '@/server/context';
 import { getHealth } from '@/server/handlers/health';
 import { handleWebSocketMessage } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
+import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import type {
   GameFinishedMessage,
   GameStartedMessage,
@@ -201,6 +202,7 @@ async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession)
       board: match.game.boardState,
       hands: match.game.handsState,
       version: match.game.version,
+      canonicalState: match.game.canonicalState,
     },
   };
 
@@ -217,18 +219,6 @@ async function broadcastToMatch(
 ) {
   runtime.socketByUserId.get(match.playerBlackUserId)?.send(JSON.stringify(message));
   runtime.socketByUserId.get(match.playerWhiteUserId)?.send(JSON.stringify(message));
-}
-
-function buildGameStateUpdatedMessage(match: MatchSession): GameStateUpdatedMessage {
-  return {
-    type: 'game_state_updated',
-    matchId: match.matchId,
-    version: match.game.version,
-    turn: match.game.turn,
-    board: match.game.boardState,
-    hands: match.game.handsState,
-    lastMove: match.game.lastMove,
-  };
 }
 
 async function notifyOpponentReconnected(

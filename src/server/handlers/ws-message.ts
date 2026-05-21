@@ -2,6 +2,22 @@ import { DomainError } from '@/lib/errors';
 import type { ServerContext } from '@/server/context';
 import type { WebSocketClientMessage, WebSocketServerMessage } from '@/types/protocol';
 import { roleForUser } from '@/services/matchmaking';
+import type { MatchSession } from '@/types/domain';
+import type { GameStateUpdatedMessage } from '@/types/protocol';
+
+export function buildGameStateUpdatedMessage(match: MatchSession): GameStateUpdatedMessage {
+  return {
+    type: 'game_state_updated',
+    matchId: match.matchId,
+    version: match.game.version,
+    turn: match.game.turn,
+    board: match.game.boardState,
+    hands: match.game.handsState,
+    lastMove: match.game.lastMove,
+    lastSkillTriggered: match.game.lastSkillTriggered,
+    canonicalState: match.game.canonicalState,
+  };
+}
 
 export async function handleWebSocketMessage(
   context: ServerContext,
@@ -41,15 +57,7 @@ export async function handleWebSocketMessage(
           expectedVersion: message.expectedVersion,
           move: message.move,
         });
-        return {
-          type: 'game_state_updated',
-          matchId: match.matchId,
-          version: match.game.version,
-          turn: match.game.turn,
-          board: match.game.boardState,
-          hands: match.game.handsState,
-          lastMove: match.game.lastMove,
-        };
+        return buildGameStateUpdatedMessage(match);
       }
       case 'resign': {
         const match = await context.services.gameCommand.resign(message.matchId, message.userId);
