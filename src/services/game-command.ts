@@ -3,6 +3,7 @@ import { addSeconds, nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
+import type { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
 import type { MatchRepository } from '@/repositories/contracts';
 import type { MatchSession, MovePayload, PlayerSide } from '@/types/domain';
 
@@ -12,7 +13,15 @@ export class GameCommandService {
     private readonly eventPublisher: BffEventPublisher,
     private readonly ruleEngine: RuleEngine,
     private readonly config: MatchingServerConfig,
+    private readonly pvpRatingClient: BffPvpRatingClient | null = null,
   ) {}
+
+  private async publishFinished(match: MatchSession) {
+    await this.eventPublisher.publishMatchEvent(match, 'match.finished');
+    if (this.pvpRatingClient) {
+      await this.pvpRatingClient.applyMatchFinished(match);
+    }
+  }
 
   async makeMove(input: {
     matchId: string;
@@ -101,7 +110,7 @@ export class GameCommandService {
       endReason: 'resign',
     };
     await this.matchRepository.save(finished);
-    await this.eventPublisher.publishMatchEvent(finished, 'match.finished');
+    await this.publishFinished(finished);
     return finished;
   }
 

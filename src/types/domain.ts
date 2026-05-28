@@ -129,6 +129,7 @@ export type ConnectionRecord = {
 export type QueueEntry = {
   queueEntryId: string;
   userId: string;
+  displayName: string;
   rating: number;
   ratingBucket: number;
   status: QueueStatus;
@@ -147,6 +148,10 @@ export type MatchSession = {
   status: MatchStatus;
   playerBlackUserId: string;
   playerWhiteUserId: string;
+  playerBlackDisplayName: string;
+  playerWhiteDisplayName: string;
+  playerBlackRating: number;
+  playerWhiteRating: number;
   playerBlackConnectionId: string;
   playerWhiteConnectionId: string;
   startedAt: string;

@@ -15,6 +15,8 @@ bun run build:online-validator
 cd ..\matching_server.shogi
 $env:APP_SHOGI_ROOT = "C:\path\to\CodeBase\app.shogi"
 $env:PORT = "3010"
+$env:MATCHING_BFF_BASE_URL = "http://localhost:3000"
+$env:MATCHING_BFF_INTERNAL_TOKEN = "your-internal-token"
 bun run dev:ws
 ```
 
@@ -26,7 +28,8 @@ bun run dev:ws
 |------|------|
 | `PORT` | WebSocket ポート（既定 3010） |
 | `APP_SHOGI_ROOT` | app.shogi ルート（設定時フルエンジン検証） |
-| `MATCHING_BFF_BASE_URL` | 駒マスタ取得用 BFF URL |
+| `MATCHING_BFF_BASE_URL` | 駒マスタ・対人レート更新用 BFF URL |
+| `MATCHING_BFF_INTERNAL_TOKEN` | BFF `POST /api/v1/internal/pvp-rating/apply` 用トークン（BFF と同値） |
 | `MATCHING_RATING_BUCKET_SIZE` | レート帯幅 |
 | `MATCHING_RECONNECT_GRACE_SECONDS` | 切断猶予秒 |
 

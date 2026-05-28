@@ -6,6 +6,7 @@ import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import { loadConfig } from '@/lib/config';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
+import { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
 import { InMemoryConnectionRepository } from '@/repositories/memory/connection-repository';
 import { InMemoryIntegrationEventRepository } from '@/repositories/memory/integration-event-repository';
 import { InMemoryMatchRepository } from '@/repositories/memory/match-repository';
@@ -29,6 +30,7 @@ export function createServerContext() {
     : new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
   const battleSetupClient = config.bffBaseUrl ? new BffBattleSetupClient(config.bffBaseUrl) : null;
+  const pvpRatingClient = BffPvpRatingClient.fromConfig(config);
 
   return {
     config,
@@ -50,7 +52,13 @@ export function createServerContext() {
         battleSetupClient,
         config,
       ),
-      gameCommand: new GameCommandService(matches, eventPublisher, ruleEngine, config),
+      gameCommand: new GameCommandService(
+        matches,
+        eventPublisher,
+        ruleEngine,
+        config,
+        pvpRatingClient,
+      ),
     },
   };
 }

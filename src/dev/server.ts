@@ -4,11 +4,11 @@ import { getHealth } from '@/server/handlers/health';
 import { handleWebSocketMessage } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
+import { buildMatchFoundMessage } from '@/services/matchmaking';
 import type {
   GameFinishedMessage,
   GameStartedMessage,
   GameStateUpdatedMessage,
-  MatchFoundMessage,
   WebSocketClientMessage,
   WebSocketServerMessage,
 } from '@/types/protocol';
@@ -183,16 +183,8 @@ async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession)
   const whiteSocket = runtime.socketByUserId.get(match.playerWhiteUserId);
   if (!blackSocket || !whiteSocket) return;
 
-  const blackFound: MatchFoundMessage = {
-    type: 'match_found',
-    matchId: match.matchId,
-    role: 'black',
-  };
-  const whiteFound: MatchFoundMessage = {
-    type: 'match_found',
-    matchId: match.matchId,
-    role: 'white',
-  };
+  const blackFound = buildMatchFoundMessage(match, match.playerBlackUserId);
+  const whiteFound = buildMatchFoundMessage(match, match.playerWhiteUserId);
   const started: GameStartedMessage = {
     type: 'game_started',
     matchId: match.matchId,

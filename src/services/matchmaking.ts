@@ -9,6 +9,7 @@ import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
 import type { MatchRepository, QueueRepository } from '@/repositories/contracts';
 import type { MatchSession, PlayerSide, QueueEntry } from '@/types/domain';
+import type { MatchFoundMessage } from '@/types/protocol';
 
 export class MatchmakingService {
   constructor(
@@ -81,6 +82,10 @@ export class MatchmakingService {
       status: 'started',
       playerBlackUserId: black.userId,
       playerWhiteUserId: white.userId,
+      playerBlackDisplayName: black.displayName,
+      playerWhiteDisplayName: white.displayName,
+      playerBlackRating: black.rating,
+      playerWhiteRating: white.rating,
       playerBlackConnectionId: black.connectionId,
       playerWhiteConnectionId: white.connectionId,
       startedAt,
@@ -146,4 +151,27 @@ export function roleForUser(match: MatchSession, userId: string): PlayerSide | n
   if (match.playerBlackUserId === userId) return 'black';
   if (match.playerWhiteUserId === userId) return 'white';
   return null;
+}
+
+export function buildMatchFoundMessage(match: MatchSession, userId: string): MatchFoundMessage {
+  const role = roleForUser(match, userId);
+  if (!role) {
+    throw new Error(`User ${userId} is not part of match ${match.matchId}`);
+  }
+  const selfIsBlack = role === 'black';
+  return {
+    type: 'match_found',
+    matchId: match.matchId,
+    role,
+    self: {
+      userId,
+      displayName: selfIsBlack ? match.playerBlackDisplayName : match.playerWhiteDisplayName,
+      rating: selfIsBlack ? match.playerBlackRating : match.playerWhiteRating,
+    },
+    opponent: {
+      userId: selfIsBlack ? match.playerWhiteUserId : match.playerBlackUserId,
+      displayName: selfIsBlack ? match.playerWhiteDisplayName : match.playerBlackDisplayName,
+      rating: selfIsBlack ? match.playerWhiteRating : match.playerBlackRating,
+    },
+  };
 }

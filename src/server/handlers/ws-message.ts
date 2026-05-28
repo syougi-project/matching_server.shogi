@@ -1,7 +1,7 @@
 import { DomainError } from '@/lib/errors';
 import type { ServerContext } from '@/server/context';
 import type { WebSocketClientMessage, WebSocketServerMessage } from '@/types/protocol';
-import { roleForUser } from '@/services/matchmaking';
+import { buildMatchFoundMessage, roleForUser } from '@/services/matchmaking';
 import type { MatchSession } from '@/types/domain';
 import type { GameStateUpdatedMessage } from '@/types/protocol';
 
@@ -31,6 +31,7 @@ export async function handleWebSocketMessage(
           userId: message.userId,
           connectionId,
           rating: message.rating,
+          displayName: message.displayName,
           region: message.region,
           battleSetupId: message.battleSetupId,
         });
@@ -99,11 +100,6 @@ export async function handleWebSocketMessage(
 export async function pollMatchmaking(context: ServerContext, userId: string) {
   const match = await context.services.matchmaking.runOnce();
   if (!match) return null;
-  const role = roleForUser(match, userId);
-  if (!role) return null;
-  return {
-    type: 'match_found' as const,
-    matchId: match.matchId,
-    role,
-  };
+  if (!roleForUser(match, userId)) return null;
+  return buildMatchFoundMessage(match, userId);
 }

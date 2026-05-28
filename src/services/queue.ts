@@ -15,6 +15,7 @@ export class QueueService {
     userId: string;
     connectionId: string;
     rating: number;
+    displayName?: string;
     region?: string;
     battleSetupId?: string;
   }) {
@@ -24,9 +25,11 @@ export class QueueService {
     }
 
     const now = nowIso();
+    const displayName = (input.displayName ?? '').trim() || input.userId;
     const queueEntry: QueueEntry = {
       queueEntryId: createId('queue'),
       userId: input.userId,
+      displayName,
       rating: input.rating,
       ratingBucket: computeRatingBucket(input.rating, this.config.ratingBucketSize),
       status: 'waiting',

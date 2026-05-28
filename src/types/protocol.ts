@@ -1,11 +1,18 @@
 import type { MatchingCanonicalState } from '@/types/canonical-state';
 import type { MovePayload, PlayerSide } from '@/types/domain';
 
+export type MatchPlayerProfile = {
+  userId: string;
+  displayName: string;
+  rating: number;
+};
+
 export type EnterQueueMessage = {
   action: 'enter_queue';
   requestId: string;
   userId: string;
   rating: number;
+  displayName?: string;
   region?: string;
   battleSetupId?: string;
 };
@@ -55,6 +62,8 @@ export type WebSocketServerMessage =
       type: 'match_found';
       matchId: string;
       role: PlayerSide;
+      self: MatchPlayerProfile;
+      opponent: MatchPlayerProfile;
     }
   | {
       type: 'game_started';
