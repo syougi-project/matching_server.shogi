@@ -22,6 +22,8 @@ bun run dev:ws
 
 全駒定義をサーバー側でも揃えるには `MATCHING_BFF_BASE_URL`（app と同じ BFF）の利用を推奨します。未設定時は内蔵の標準駒＋霧・刀など限定カタログになります。
 
+`APP_SHOGI_ROOT` 設定時は、マッチ作成時の `ruleSnapshot` も app.shogi の `preparePieceCatalogForBattleAndDisplay`（ガチャ駒の移動範囲・スキル正典）で正規化されます。エンジン変更後は `app.shogi` で `bun run build:online-validator` を実行してください。
+
 ## 環境変数
 
 | 変数 | 説明 |

@@ -2,6 +2,7 @@ import { BffPieceCatalogProvider } from '@/catalog/bff-piece-catalog';
 import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { AppShogiRuleEngine } from '@/game/app-shogi-rule-engine';
+import { AppShogiValidatorClient } from '@/integrations/app-shogi-validator';
 import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import { loadConfig } from '@/lib/config';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
@@ -24,9 +25,17 @@ export function createServerContext() {
   const pieceCatalog = config.bffBaseUrl
     ? new BffPieceCatalogProvider(config.bffBaseUrl)
     : new InMemoryPieceCatalogProvider();
-  const ruleSnapshotBuilder = new RuleSnapshotBuilder(pieceCatalog);
-  const ruleEngine = config.appShogiRoot
-    ? new AppShogiRuleEngine(config.appShogiRoot)
+  const appShogiValidator = config.appShogiRoot
+    ? new AppShogiValidatorClient(config.appShogiRoot)
+    : null;
+  const ruleSnapshotBuilder = new RuleSnapshotBuilder(
+    pieceCatalog,
+    appShogiValidator
+      ? (items) => appShogiValidator.normalizePieceCatalogItems(items)
+      : undefined,
+  );
+  const ruleEngine = appShogiValidator
+    ? new AppShogiRuleEngine(config.appShogiRoot!)
     : new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
   const battleSetupClient = config.bffBaseUrl ? new BffBattleSetupClient(config.bffBaseUrl) : null;

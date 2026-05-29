@@ -67,6 +67,15 @@ export function gameSnapshotToWire(game: GameSnapshot): {
 export class AppShogiValidatorClient {
   constructor(private readonly appShogiRoot: string) {}
 
+  /** app.shogi のガチャ移動・スキル正典で BFF カタログを正規化する */
+  normalizePieceCatalogItems(items: AppShogiPieceCatalogItem[]): AppShogiPieceCatalogItem[] {
+    const raw = this.invoke({ op: 'normalizeCatalog', pieceCatalog: items });
+    if (!raw.ok || !Array.isArray(raw.pieceCatalog)) {
+      throw new Error(raw.message ?? 'normalizeCatalog failed');
+    }
+    return raw.pieceCatalog as AppShogiPieceCatalogItem[];
+  }
+
   syncFromWire(
     game: GameSnapshot,
     rules: RuleSnapshot,

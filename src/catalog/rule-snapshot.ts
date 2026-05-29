@@ -1,17 +1,31 @@
 import { nowIso } from '@/lib/time';
 import type { PieceCatalogProvider } from '@/catalog/contracts';
+import {
+  catalogItemsToPieceDefinitions,
+  pieceDefinitionsToCatalogItems,
+  type PvpCatalogNormalizer,
+} from '@/catalog/pvp-catalog-normalize';
 import type { PieceDefinition, RuleSnapshot, SkillDefinition } from '@/types/domain';
 
 export class RuleSnapshotBuilder {
-  constructor(private readonly catalogProvider: PieceCatalogProvider) {}
+  constructor(
+    private readonly catalogProvider: PieceCatalogProvider,
+    private readonly catalogNormalizer?: PvpCatalogNormalizer,
+  ) {}
 
   async buildSnapshot(): Promise<RuleSnapshot> {
-    const catalog = await this.catalogProvider.listPieces();
+    let catalog = await this.catalogProvider.listPieces();
+    if (this.catalogNormalizer) {
+      const items = pieceDefinitionsToCatalogItems(catalog);
+      const normalized = await this.catalogNormalizer(items);
+      catalog = catalogItemsToPieceDefinitions(normalized, catalog);
+    }
+
     const piecesByCode: Record<string, PieceDefinition> = {};
     const skillDefinitions: SkillDefinition[] = [];
 
     for (const piece of catalog) {
-      piecesByCode[piece.pieceCode.toUpperCase()] = normalizePiece(piece);
+      registerPieceAliases(piecesByCode, piece);
       for (const definition of piece.skillDefinitionsV2?.definitions ?? []) {
         skillDefinitions.push({
           ...definition,
@@ -26,6 +40,19 @@ export class RuleSnapshotBuilder {
       piecesByCode,
       skillDefinitions,
     };
+  }
+}
+
+function registerPieceAliases(
+  piecesByCode: Record<string, PieceDefinition>,
+  piece: PieceDefinition,
+): void {
+  const normalized = normalizePiece(piece);
+  const primaryKey = normalized.pieceCode.toUpperCase();
+  piecesByCode[primaryKey] = normalized;
+  const ch = piece.char?.trim();
+  if (ch) {
+    piecesByCode[ch.toUpperCase()] = normalized;
   }
 }
 
