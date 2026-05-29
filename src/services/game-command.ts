@@ -4,6 +4,7 @@ import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
 import type { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
+import { BffMatchResultClient } from '@/integrations/bff-match-result-client';
 import type { MatchRepository } from '@/repositories/contracts';
 import type { MatchSession, MovePayload, PlayerSide } from '@/types/domain';
 
@@ -13,11 +14,13 @@ export class GameCommandService {
     private readonly eventPublisher: BffEventPublisher,
     private readonly ruleEngine: RuleEngine,
     private readonly config: MatchingServerConfig,
+    private readonly matchResultClient: BffMatchResultClient | null = null,
     private readonly pvpRatingClient: BffPvpRatingClient | null = null,
   ) {}
 
   private async publishFinished(match: MatchSession) {
     await this.eventPublisher.publishMatchEvent(match, 'match.finished');
+    await this.matchResultClient?.recordResult(match);
     if (this.pvpRatingClient) {
       await this.pvpRatingClient.applyMatchFinished(match);
     }
@@ -83,7 +86,7 @@ export class GameCommandService {
     }
 
     if (result.finished) {
-      await this.eventPublisher.publishMatchEvent(resolvedMatch, 'match.finished');
+      await this.publishFinished(resolvedMatch);
     }
 
     return resolvedMatch;
@@ -161,6 +164,7 @@ export class GameCommandService {
     };
     await this.matchRepository.save(aborted);
     await this.eventPublisher.publishMatchEvent(aborted, 'match.aborted');
+    await this.matchResultClient?.recordResult(aborted);
     return aborted;
   }
 

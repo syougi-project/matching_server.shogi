@@ -5,6 +5,7 @@ import { handleWebSocketMessage } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import { buildMatchFoundMessage } from '@/services/matchmaking';
+import { verifyMatchmakingTicket } from '@/lib/matchmaking-ticket';
 import type {
   GameFinishedMessage,
   GameStartedMessage,
@@ -22,6 +23,8 @@ type RuntimeState = {
 type RuntimeSocketData = {
   connectionId: string;
   userId: string;
+  displayName: string;
+  rating: number;
   requestedMatchId: string | null;
 };
 
@@ -39,126 +42,125 @@ export function startLocalDevServer(port = 3010) {
     server = Bun.serve<RuntimeSocketData>({
       port: selectedPort,
       fetch(req, server) {
-      const url = new URL(req.url);
-      if (url.pathname === '/health') {
-        return Response.json(getHealth());
-      }
+        const url = new URL(req.url);
+        if (url.pathname === '/health') {
+          return Response.json(getHealth());
+        }
 
-      if (url.pathname !== '/ws') {
-        return new Response('Not found', { status: 404 });
-      }
+        if (url.pathname !== '/ws') {
+          return new Response('Not found', { status: 404 });
+        }
 
-      const userId = url.searchParams.get('userId')?.trim();
-      if (!userId) {
-        return new Response('Missing userId', { status: 400 });
-      }
+        const identity = resolveSocketIdentity(url, context.config.matchingTicketSecret ?? null);
+        if (!identity) {
+          return new Response('Missing or invalid identity', { status: 401 });
+        }
 
-      const connectionId = `conn_${Math.random().toString(36).slice(2, 10)}`;
-      const requestedMatchId = url.searchParams.get('matchId')?.trim() || null;
-      const upgraded = server.upgrade(req, {
-        data: {
-          connectionId,
-          userId,
-          requestedMatchId,
-        },
-      });
+        const connectionId = `conn_${Math.random().toString(36).slice(2, 10)}`;
+        const requestedMatchId = url.searchParams.get('matchId')?.trim() || null;
+        const upgraded = server.upgrade(req, {
+          data: {
+            connectionId,
+            userId: identity.userId,
+            displayName: identity.displayName,
+            rating: identity.rating,
+            requestedMatchId,
+          },
+        });
 
-      return upgraded ? undefined : new Response('Upgrade failed', { status: 500 });
+        return upgraded ? undefined : new Response('Upgrade failed', { status: 500 });
       },
       websocket: {
-      async open(socket) {
-        const userId = socket.data.userId;
-        const connectionId = socket.data.connectionId;
-        runtime.userIdByConnectionId.set(connectionId, userId);
-        runtime.socketByUserId.set(userId, socket);
+        async open(socket) {
+          const userId = socket.data.userId;
+          const connectionId = socket.data.connectionId;
+          runtime.userIdByConnectionId.set(connectionId, userId);
+          runtime.socketByUserId.set(userId, socket);
 
-        const activeMatchId = socket.data.requestedMatchId;
-        if (!activeMatchId) return;
+          const activeMatchId = socket.data.requestedMatchId;
+          if (!activeMatchId) return;
 
-        try {
-          const match = await context.services.gameCommand.reconnect(activeMatchId, userId, connectionId);
-          runtime.matchIdByUserId.set(userId, match.matchId);
-          socket.send(
-            JSON.stringify(buildGameStateUpdatedMessage(match)),
-          );
-          await notifyOpponentReconnected(runtime, match, userId);
-        } catch (error) {
-          socket.send(
-            JSON.stringify(toErrorMessage(undefined, error)),
-          );
-        }
-      },
-      async message(socket, raw) {
-        const text = typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf8');
-        let message: WebSocketClientMessage;
-        try {
-          message = JSON.parse(text) as WebSocketClientMessage;
-        } catch {
-          socket.send(
-            JSON.stringify({
-              type: 'error',
-              code: 'INVALID_JSON',
-              message: 'Message must be valid JSON',
-            } satisfies WebSocketServerMessage),
-          );
-          return;
-        }
-
-        const response = await handleWebSocketMessage(context, socket.data.connectionId, message);
-        socket.send(JSON.stringify(response));
-
-        if (message.action === 'enter_queue') {
-          const match = await context.services.matchmaking.runOnce();
-          if (match) {
-            runtime.matchIdByUserId.set(match.playerBlackUserId, match.matchId);
-            runtime.matchIdByUserId.set(match.playerWhiteUserId, match.matchId);
-            await broadcastMatchStarted(runtime, match);
+          try {
+            const match = await context.services.gameCommand.reconnect(activeMatchId, userId, connectionId);
+            runtime.matchIdByUserId.set(userId, match.matchId);
+            socket.send(JSON.stringify(buildGameStateUpdatedMessage(match)));
+            await notifyOpponentReconnected(runtime, match, userId);
+          } catch (error) {
+            socket.send(JSON.stringify(toErrorMessage(undefined, error)));
           }
-          return;
-        }
-
-        if (message.action === 'make_move' && response.type === 'game_state_updated') {
-          const match = await context.repositories.matches.findById(response.matchId);
-          if (match) {
-            await broadcastToMatch(runtime, match, buildGameStateUpdatedMessage(match));
+        },
+        async message(socket, raw) {
+          const text = typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf8');
+          let message: WebSocketClientMessage;
+          try {
+            message = JSON.parse(text) as WebSocketClientMessage;
+          } catch {
+            socket.send(
+              JSON.stringify({
+                type: 'error',
+                code: 'INVALID_JSON',
+                message: 'Message must be valid JSON',
+              } satisfies WebSocketServerMessage),
+            );
+            return;
           }
-          return;
-        }
 
-        if (message.action === 'resign' && response.type === 'game_finished') {
-          const match = await context.repositories.matches.findById(response.matchId);
-          if (match) {
-            await broadcastToMatch(runtime, match, response);
+          const trustedMessage = applySocketIdentity(message, socket.data);
+          const response = await handleWebSocketMessage(context, socket.data.connectionId, trustedMessage);
+          socket.send(JSON.stringify(response));
+
+          if (trustedMessage.action === 'enter_queue') {
+            const match = await context.services.matchmaking.runOnce();
+            if (match) {
+              runtime.matchIdByUserId.set(match.playerBlackUserId, match.matchId);
+              runtime.matchIdByUserId.set(match.playerWhiteUserId, match.matchId);
+              await broadcastMatchStarted(runtime, match);
+            }
+            return;
           }
-        }
-      },
-      async close(socket) {
-        const { connectionId, userId } = socket.data;
-        runtime.userIdByConnectionId.delete(connectionId);
-        runtime.socketByUserId.delete(userId);
 
-        const matchId = runtime.matchIdByUserId.get(userId);
-        if (!matchId) return;
+          if (trustedMessage.action === 'make_move' && response.type === 'game_state_updated') {
+            const match = await context.repositories.matches.findById(response.matchId);
+            if (match) {
+              await broadcastToMatch(runtime, match, buildGameStateUpdatedMessage(match));
+            }
+            return;
+          }
 
-        try {
-          const match = await context.services.gameCommand.disconnect(matchId, userId);
-          const deadline = match.reconnectDeadlineAt;
-          if (!deadline) return;
+          if (trustedMessage.action === 'resign' && response.type === 'game_finished') {
+            const match = await context.repositories.matches.findById(response.matchId);
+            if (match) {
+              await broadcastToMatch(runtime, match, response);
+            }
+          }
+        },
+        async close(socket) {
+          const { connectionId, userId } = socket.data;
+          runtime.userIdByConnectionId.delete(connectionId);
+          runtime.socketByUserId.delete(userId);
 
-          const opponentUserId =
-            match.playerBlackUserId === userId ? match.playerWhiteUserId : match.playerBlackUserId;
-          const opponent = runtime.socketByUserId.get(opponentUserId);
-          opponent?.send(
-            JSON.stringify({
-              type: 'opponent_disconnected',
-              matchId: match.matchId,
-              reconnectDeadlineAt: deadline,
-            } satisfies WebSocketServerMessage),
-          );
-        } catch {
-          // Ignore close-time disconnect failures in local runtime.
-        }
-      },
+          const matchId = runtime.matchIdByUserId.get(userId);
+          if (!matchId) return;
+
+          try {
+            const match = await context.services.gameCommand.disconnect(matchId, userId);
+            const deadline = match.reconnectDeadlineAt;
+            if (!deadline) return;
+
+            const opponentUserId =
+              match.playerBlackUserId === userId ? match.playerWhiteUserId : match.playerBlackUserId;
+            const opponent = runtime.socketByUserId.get(opponentUserId);
+            opponent?.send(
+              JSON.stringify({
+                type: 'opponent_disconnected',
+                matchId: match.matchId,
+                reconnectDeadlineAt: deadline,
+              } satisfies WebSocketServerMessage),
+            );
+          } catch {
+            // Ignore close-time disconnect failures in local runtime.
+          }
+        },
       },
     });
   } catch (error) {
@@ -235,6 +237,48 @@ function toErrorMessage(requestId: string | undefined, error: unknown): WebSocke
     code: 'INTERNAL_ERROR',
     message: error instanceof Error ? error.message : 'Unexpected error',
   };
+}
+
+function resolveSocketIdentity(
+  url: URL,
+  ticketSecret: string | null,
+): Pick<RuntimeSocketData, 'userId' | 'displayName' | 'rating'> | null {
+  const ticket = url.searchParams.get('ticket')?.trim();
+  if (ticket && ticketSecret) {
+    try {
+      const claims = verifyMatchmakingTicket(ticket, ticketSecret);
+      return {
+        userId: claims.userId,
+        displayName: claims.displayName,
+        rating: claims.rating,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const userId = url.searchParams.get('userId')?.trim();
+  if (!userId) return null;
+  return {
+    userId,
+    displayName: url.searchParams.get('displayName')?.trim() || userId,
+    rating: Number(url.searchParams.get('rating') ?? '0') || 0,
+  };
+}
+
+function applySocketIdentity(
+  message: WebSocketClientMessage,
+  identity: RuntimeSocketData,
+): WebSocketClientMessage {
+  if (message.action === 'enter_queue') {
+    return {
+      ...message,
+      userId: identity.userId,
+      displayName: message.displayName ?? identity.displayName,
+      rating: Number.isFinite(message.rating) && message.rating > 0 ? message.rating : identity.rating,
+    };
+  }
+  return { ...message, userId: identity.userId };
 }
 
 if (import.meta.main) {

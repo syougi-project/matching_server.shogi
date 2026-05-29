@@ -4,6 +4,7 @@ import type {
   MatchSession,
   QueueEntry,
 } from '@/types/domain';
+import type { WebSocketServerMessage } from '@/types/protocol';
 
 export interface ConnectionRepository {
   save(connection: ConnectionRecord): Promise<void>;
@@ -36,4 +37,17 @@ export interface MatchRepository {
 export interface IntegrationEventRepository {
   save(event: IntegrationEvent): Promise<void>;
   listPending(): Promise<IntegrationEvent[]>;
+}
+
+export type IdempotencyRecord = {
+  idempotencyKey: string;
+  requestId: string;
+  response: WebSocketServerMessage;
+  createdAt: string;
+  ttl: number;
+};
+
+export interface IdempotencyRepository {
+  saveIfAbsent(record: IdempotencyRecord): Promise<boolean>;
+  findByKey(idempotencyKey: string): Promise<IdempotencyRecord | null>;
 }

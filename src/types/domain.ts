@@ -148,10 +148,16 @@ export type MatchSession = {
   status: MatchStatus;
   playerBlackUserId: string;
   playerWhiteUserId: string;
-  playerBlackDisplayName: string;
-  playerWhiteDisplayName: string;
-  playerBlackRating: number;
-  playerWhiteRating: number;
+  playerBlackProfile: {
+    userId: string;
+    displayName: string;
+    rating: number;
+  };
+  playerWhiteProfile: {
+    userId: string;
+    displayName: string;
+    rating: number;
+  };
   playerBlackConnectionId: string;
   playerWhiteConnectionId: string;
   startedAt: string;

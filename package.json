@@ -7,6 +7,7 @@
   "scripts": {
     "dev:ws": "bun run src/dev/server.ts",
     "smoke:match": "bun run scripts/dev-match-smoke.ts",
+    "tf:sync-env": "bun run scripts/sync-terraform-env.ts",
     "test": "bun test",
     "test:unit": "bun test",
     "typecheck": "tsc --noEmit"

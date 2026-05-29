@@ -3,8 +3,10 @@ export type MatchingServerConfig = {
   reconnectGraceSeconds: number;
   queueTtlSeconds: number;
   bffBaseUrl: string | null;
+  matchingTicketSecret?: string | null;
+  bffInternalToken?: string | null;
   /** app.shogi ルート（設定時は本番エンジンで着手検証） */
-  appShogiRoot: string | null;
+  appShogiRoot?: string | null;
 };
 
 export function loadConfig(env = process.env): MatchingServerConfig {
@@ -13,6 +15,8 @@ export function loadConfig(env = process.env): MatchingServerConfig {
     reconnectGraceSeconds: parsePositiveInt(env.MATCHING_RECONNECT_GRACE_SECONDS, 30),
     queueTtlSeconds: parsePositiveInt(env.MATCHING_QUEUE_TTL_SECONDS, 120),
     bffBaseUrl: normalizeUrl(env.MATCHING_BFF_BASE_URL),
+    matchingTicketSecret: normalizeSecret(env.MATCHING_TICKET_SECRET),
+    bffInternalToken: normalizeSecret(env.MATCHING_BFF_INTERNAL_TOKEN),
     appShogiRoot: normalizeAppRoot(env.APP_SHOGI_ROOT),
   };
 }
@@ -33,4 +37,9 @@ function normalizeUrl(raw: string | undefined) {
   const trimmed = raw?.trim();
   if (!trimmed) return null;
   return trimmed.replace(/\/+$/, '');
+}
+
+function normalizeSecret(raw: string | undefined) {
+  const trimmed = raw?.trim();
+  return trimmed || null;
 }

@@ -82,10 +82,8 @@ export class MatchmakingService {
       status: 'started',
       playerBlackUserId: black.userId,
       playerWhiteUserId: white.userId,
-      playerBlackDisplayName: black.displayName,
-      playerWhiteDisplayName: white.displayName,
-      playerBlackRating: black.rating,
-      playerWhiteRating: white.rating,
+      playerBlackProfile: profileFromQueue(black),
+      playerWhiteProfile: profileFromQueue(white),
       playerBlackConnectionId: black.connectionId,
       playerWhiteConnectionId: white.connectionId,
       startedAt,
@@ -121,6 +119,12 @@ export class MatchmakingService {
       this.battleSetupClient.getBattleSetup(black.battleSetupId, black.userId),
       this.battleSetupClient.getBattleSetup(white.battleSetupId, white.userId),
     ]);
+    if (typeof this.battleSetupClient.consumeBattleSetup === 'function') {
+      await Promise.all([
+        this.battleSetupClient.consumeBattleSetup(black.battleSetupId, black.userId),
+        this.battleSetupClient.consumeBattleSetup(white.battleSetupId, white.userId),
+      ]);
+    }
 
     const base = createInitialGameFromBattleSetups({
       rules: ruleSnapshot,
@@ -132,6 +136,14 @@ export class MatchmakingService {
     }
     return base;
   }
+}
+
+function profileFromQueue(entry: QueueEntry) {
+  return {
+    userId: entry.userId,
+    displayName: entry.displayName,
+    rating: entry.rating,
+  };
 }
 
 export function expandBuckets(origin: number, bucketSize: number, availableBuckets: number[]) {
@@ -163,15 +175,7 @@ export function buildMatchFoundMessage(match: MatchSession, userId: string): Mat
     type: 'match_found',
     matchId: match.matchId,
     role,
-    self: {
-      userId,
-      displayName: selfIsBlack ? match.playerBlackDisplayName : match.playerWhiteDisplayName,
-      rating: selfIsBlack ? match.playerBlackRating : match.playerWhiteRating,
-    },
-    opponent: {
-      userId: selfIsBlack ? match.playerWhiteUserId : match.playerBlackUserId,
-      displayName: selfIsBlack ? match.playerWhiteDisplayName : match.playerBlackDisplayName,
-      rating: selfIsBlack ? match.playerWhiteRating : match.playerBlackRating,
-    },
+    self: selfIsBlack ? match.playerBlackProfile : match.playerWhiteProfile,
+    opponent: selfIsBlack ? match.playerWhiteProfile : match.playerBlackProfile,
   };
 }

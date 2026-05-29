@@ -13,9 +13,9 @@ export class QueueService {
 
   async enterQueue(input: {
     userId: string;
+    displayName?: string;
     connectionId: string;
     rating: number;
-    displayName?: string;
     region?: string;
     battleSetupId?: string;
   }) {

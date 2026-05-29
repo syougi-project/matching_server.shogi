@@ -7,21 +7,38 @@ import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import { loadConfig } from '@/lib/config';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
+import { BffMatchResultClient } from '@/integrations/bff-match-result-client';
 import { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
 import { InMemoryConnectionRepository } from '@/repositories/memory/connection-repository';
 import { InMemoryIntegrationEventRepository } from '@/repositories/memory/integration-event-repository';
 import { InMemoryMatchRepository } from '@/repositories/memory/match-repository';
 import { InMemoryQueueRepository } from '@/repositories/memory/queue-repository';
+import type {
+  ConnectionRepository,
+  IntegrationEventRepository,
+  MatchRepository,
+  QueueRepository,
+} from '@/repositories/contracts';
 import { GameCommandService } from '@/services/game-command';
 import { MatchmakingService } from '@/services/matchmaking';
 import { QueueService } from '@/services/queue';
 
-export function createServerContext() {
+export type ServerContextOverrides = {
+  repositories?: {
+    connections?: ConnectionRepository;
+    queue?: QueueRepository;
+    matches?: MatchRepository;
+    integrationEvents?: IntegrationEventRepository;
+  };
+};
+
+export function createServerContext(overrides: ServerContextOverrides = {}) {
   const config = loadConfig();
-  const connections = new InMemoryConnectionRepository();
-  const queue = new InMemoryQueueRepository();
-  const matches = new InMemoryMatchRepository();
-  const integrationEvents = new InMemoryIntegrationEventRepository();
+  const connections = overrides.repositories?.connections ?? new InMemoryConnectionRepository();
+  const queue = overrides.repositories?.queue ?? new InMemoryQueueRepository();
+  const matches = overrides.repositories?.matches ?? new InMemoryMatchRepository();
+  const integrationEvents =
+    overrides.repositories?.integrationEvents ?? new InMemoryIntegrationEventRepository();
   const pieceCatalog = config.bffBaseUrl
     ? new BffPieceCatalogProvider(config.bffBaseUrl)
     : new InMemoryPieceCatalogProvider();
@@ -38,7 +55,12 @@ export function createServerContext() {
     ? new AppShogiRuleEngine(config.appShogiRoot!)
     : new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
-  const battleSetupClient = config.bffBaseUrl ? new BffBattleSetupClient(config.bffBaseUrl) : null;
+  const battleSetupClient = config.bffBaseUrl
+    ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+    : null;
+  const matchResultClient = config.bffBaseUrl
+    ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+    : null;
   const pvpRatingClient = BffPvpRatingClient.fromConfig(config);
 
   return {
@@ -66,6 +88,7 @@ export function createServerContext() {
         eventPublisher,
         ruleEngine,
         config,
+        matchResultClient,
         pvpRatingClient,
       ),
     },

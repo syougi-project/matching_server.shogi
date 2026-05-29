@@ -99,7 +99,7 @@ export const CANONICAL_SKILL_DEFINITIONS: readonly SkillDefinition[] = [
  */
 export function mergeSkillDefinitions(
   bffDefinitions: SkillDefinition[],
-  fallbackDefinitions: SkillDefinition[] = CANONICAL_SKILL_DEFINITIONS,
+  fallbackDefinitions: readonly SkillDefinition[] = CANONICAL_SKILL_DEFINITIONS,
 ): SkillDefinition[] {
   const bffBySkillId = new Map(bffDefinitions.map((def) => [def.skillId, def]));
 

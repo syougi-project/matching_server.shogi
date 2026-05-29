@@ -29,9 +29,9 @@ export async function handleWebSocketMessage(
       case 'enter_queue': {
         const entry = await context.services.queue.enterQueue({
           userId: message.userId,
+          displayName: message.displayName,
           connectionId,
           rating: message.rating,
-          displayName: message.displayName,
           region: message.region,
           battleSetupId: message.battleSetupId,
         });
@@ -102,4 +102,10 @@ export async function pollMatchmaking(context: ServerContext, userId: string) {
   if (!match) return null;
   if (!roleForUser(match, userId)) return null;
   return buildMatchFoundMessage(match, userId);
+}
+
+export function profileFor(match: MatchSession, role: 'black' | 'white') {
+  return role === 'black'
+    ? match.playerBlackProfile
+    : match.playerWhiteProfile;
 }

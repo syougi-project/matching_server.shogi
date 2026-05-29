@@ -1,0 +1,21 @@
+name_prefix = "matching-server-shogi-dev"
+aws_region  = "ap-northeast-1"
+
+# Build artifact produced by your Lambda bundling step.
+lambda_zip_path = "../../dist/lambda.zip"
+lambda_runtime  = "nodejs22.x"
+lambda_handler  = "index.handler"
+
+stage_name = "dev"
+
+# These values are generated from ../bff.shogi/.env into bff.auto.tfvars:
+# - bff_base_url
+# - matching_bff_internal_token
+# - matching_ticket_secret
+#
+# Generate them with:
+#   bun run tf:sync-env
+
+matchmaking_worker_rate_expression        = "rate(10 seconds)"
+reconnect_timeout_worker_rate_expression  = "rate(1 minute)"
+outbox_worker_rate_expression             = "rate(1 minute)"

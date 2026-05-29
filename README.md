@@ -30,8 +30,9 @@ bun run dev:ws
 |------|------|
 | `PORT` | WebSocket ポート（既定 3010） |
 | `APP_SHOGI_ROOT` | app.shogi ルート（設定時フルエンジン検証） |
-| `MATCHING_BFF_BASE_URL` | 駒マスタ・対人レート更新用 BFF URL |
-| `MATCHING_BFF_INTERNAL_TOKEN` | BFF `POST /api/v1/internal/pvp-rating/apply` 用トークン（BFF と同値） |
+| `MATCHING_BFF_BASE_URL` | 駒マスタ取得・対戦結果通知用 BFF URL |
+| `MATCHING_BFF_INTERNAL_TOKEN` | BFF 内部 API 呼び出し用共有トークン |
+| `MATCHING_TICKET_SECRET` | BFF 発行 matchmaking ticket 検証用署名鍵 |
 | `MATCHING_RATING_BUCKET_SIZE` | レート帯幅 |
 | `MATCHING_RECONNECT_GRACE_SECONDS` | 切断猶予秒 |
 

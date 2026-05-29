@@ -11,7 +11,11 @@ export type SkillContext = {
 
 export type SkillApplyResult = {
   triggered: boolean;
-  boardChanges: Array<{ square: string; action: 'remove' | 'add'; piece?: { side: PlayerSide; code: string } }>;
+  boardChanges: Array<{
+    square: string;
+    action: 'remove' | 'add';
+    piece?: { side: PlayerSide; code: string; promoted?: boolean };
+  }>;
   handChanges: Record<PlayerSide, Record<string, number>>;
 };
 
@@ -68,7 +72,7 @@ export function applySkillEffects(
       if (change.action === 'remove') {
         context.board.delete(change.square);
       } else if (change.action === 'add' && change.piece) {
-        context.board.set(change.square, change.piece);
+        context.board.set(change.square, { ...change.piece, promoted: change.piece.promoted ?? false });
       }
     }
 
