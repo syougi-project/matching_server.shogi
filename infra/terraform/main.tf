@@ -272,9 +272,9 @@ resource "aws_apigatewayv2_api" "websocket" {
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
-  api_id                 = aws_apigatewayv2_api.websocket.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.websocket.invoke_arn
+  api_id           = aws_apigatewayv2_api.websocket.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.websocket.invoke_arn
 }
 
 resource "aws_apigatewayv2_route" "connect" {
