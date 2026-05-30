@@ -11,8 +11,7 @@ mkdir -p "$DIST_DIR"
 bun build "$ENTRYPOINT" \
   --target=node \
   --format=cjs \
-  --outfile="$DIST_DIR/index.js" \
-  --external aws-sdk
+  --outfile="$DIST_DIR/index.js"
 
 (
   cd "$DIST_DIR"
