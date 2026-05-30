@@ -14,6 +14,8 @@ provider "aws" {
 }
 
 locals {
+  lambda_function = "manakana-shogi-matching-api"
+
   tables = {
     connections = {
       hash_key = "connectionId"
@@ -178,7 +180,7 @@ resource "aws_dynamodb_table" "queue_lookup" {
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/${var.name_prefix}-websocket"
+  name              = "/aws/lambda/${local.lambda_function}"
   retention_in_days = 14
 }
 
@@ -246,7 +248,7 @@ resource "aws_iam_role_policy_attachment" "lambda" {
 }
 
 resource "aws_lambda_function" "websocket" {
-  function_name    = "${var.name_prefix}-websocket"
+  function_name    = local.lambda_function
   role             = aws_iam_role.lambda.arn
   runtime          = var.lambda_runtime
   handler          = var.lambda_handler
