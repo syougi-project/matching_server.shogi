@@ -35,7 +35,7 @@ try_import() {
   fi
 
   echo "importing $address"
-  terraform import -no-color "$address" "$import_id" >/dev/null
+  terraform import -no-color -lock-timeout=60s "$address" "$import_id"
 }
 
 resource_exists() {

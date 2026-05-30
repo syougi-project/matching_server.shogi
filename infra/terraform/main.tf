@@ -37,13 +37,13 @@ locals {
   }
 
   lambda_environment = {
-    MATCHING_CONNECTIONS_TABLE              = aws_dynamodb_table.runtime["connections"].name
-    MATCHING_QUEUE_TABLE                    = aws_dynamodb_table.runtime["queue"].name
-    MATCHING_QUEUE_LOOKUP_TABLE             = aws_dynamodb_table.queue_lookup.name
-    MATCHING_MATCHES_TABLE                  = aws_dynamodb_table.runtime["matches"].name
-    MATCHING_MOVES_TABLE                    = aws_dynamodb_table.runtime["moves"].name
-    MATCHING_IDEMPOTENCY_TABLE              = aws_dynamodb_table.runtime["idempotency"].name
-    MATCHING_OUTBOX_TABLE                   = aws_dynamodb_table.runtime["outbox"].name
+    MATCHING_CONNECTIONS_TABLE              = "${var.name_prefix}-connections"
+    MATCHING_QUEUE_TABLE                    = "${var.name_prefix}-queue"
+    MATCHING_QUEUE_LOOKUP_TABLE             = "${var.name_prefix}-queue-lookup"
+    MATCHING_MATCHES_TABLE                  = "${var.name_prefix}-matches"
+    MATCHING_MOVES_TABLE                    = "${var.name_prefix}-moves"
+    MATCHING_IDEMPOTENCY_TABLE              = "${var.name_prefix}-idempotency"
+    MATCHING_OUTBOX_TABLE                   = "${var.name_prefix}-outbox"
     MATCHING_BFF_BASE_URL                   = var.bff_base_url
     MATCHING_BFF_INTERNAL_TOKEN             = var.matching_bff_internal_token
     MATCHING_TICKET_SECRET                  = var.matching_ticket_secret
