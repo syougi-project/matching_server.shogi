@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/deploy-sandbox.yml"
+      - "src/**"
+      - "scripts/**"
+      - "infra/terraform/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+  push:
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/deploy-sandbox.yml"
+      - "src/**"
+      - "scripts/**"
+      - "infra/terraform/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit Tests
+        run: bun run test
+
+      - name: Build Lambda zip
+        run: bun run build:lambda
+
+      - name: Shell Script Syntax Check
+        run: bash -n scripts/terraform-import-existing.sh
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: infra/terraform
+        env:
+          TF_VAR_lambda_zip_path: ../../dist/lambda.zip
+          TF_VAR_bff_base_url: https://placeholder.invalid
+          TF_VAR_matching_bff_internal_token: placeholder
+          TF_VAR_matching_ticket_secret: placeholder
+          TF_VAR_app_shogi_root: ""
+        run: terraform validate
