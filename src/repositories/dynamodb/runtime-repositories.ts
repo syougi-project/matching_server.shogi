@@ -62,10 +62,13 @@ export class DynamoConnectionRepository implements ConnectionRepository {
         IndexName: 'userId-index',
         KeyConditionExpression: 'userKey = :userId',
         ExpressionAttributeValues: { ':userId': userId },
-        Limit: 1,
       }),
     );
-    return result.Items?.[0] ?? null;
+    return (
+      (result.Items ?? [])
+        .filter((connection) => connection.status === 'connected')
+        .sort((a, b) => b.connectedAt.localeCompare(a.connectedAt))[0] ?? null
+    );
   }
 }
 
@@ -95,10 +98,13 @@ export class DynamoQueueRepository implements QueueRepository {
         IndexName: 'activeUserId-index',
         KeyConditionExpression: 'activeUserId = :userId',
         ExpressionAttributeValues: { ':userId': userId },
-        Limit: 1,
       }),
     );
-    return result.Items?.[0] ?? null;
+    return (
+      (result.Items ?? [])
+        .filter((entry) => !isExpired(entry.expiresAt))
+        .sort((a, b) => b.enqueuedAt.localeCompare(a.enqueuedAt))[0] ?? null
+    );
   }
 
   async findById(queueEntryId: string) {
@@ -138,7 +144,10 @@ export class DynamoQueueRepository implements QueueRepository {
       (result.Items ?? []).map((item) => this.findById(item.queueEntryId)),
     );
     return entries
-      .filter((entry): entry is QueueEntry => entry != null && entry.status === 'waiting')
+      .filter(
+        (entry): entry is QueueEntry =>
+          entry != null && entry.status === 'waiting' && !isExpired(entry.expiresAt),
+      )
       .sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
   }
 
@@ -253,6 +262,10 @@ export class DynamoQueueRepository implements QueueRepository {
       }),
     );
   }
+}
+
+function isExpired(expiresAt: string | null) {
+  return expiresAt != null && new Date(expiresAt).getTime() <= Date.now();
 }
 
 export class DynamoMatchRepository implements MatchRepository {

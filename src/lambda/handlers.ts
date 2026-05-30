@@ -140,7 +140,8 @@ async function message(
 
   const trustedMessage = { ...message, userId: connection.userId } as WebSocketClientMessage;
   const result = await core.handleClientMessage(connection.connectionId, trustedMessage);
-  await post(deps, connection.connectionId, result.response);
+  const responseDelivered = await tryPost(deps, connection, result.response);
+  if (!responseDelivered) return { statusCode: 200 };
 
   if (result.match) {
     await deps.connections.save({
@@ -153,7 +154,8 @@ async function message(
   for (const broadcast of result.broadcasts) {
     const target = await deps.connections.findByUserId(broadcast.userId);
     if (target?.status === 'connected') {
-      await post(deps, target.connectionId, broadcast.message);
+      const delivered = await tryPost(deps, target, broadcast.message);
+      if (!delivered) continue;
       if (result.match && target.currentMatchId !== result.match.matchId) {
         await deps.connections.save({ ...target, currentMatchId: result.match.matchId });
       }
@@ -184,8 +186,36 @@ async function postToOpponent(
     match.playerBlackUserId === userId ? match.playerWhiteUserId : match.playerBlackUserId;
   const opponent = await deps.connections.findByUserId(opponentUserId);
   if (opponent?.status === 'connected') {
-    await post(deps, opponent.connectionId, message);
+    await tryPost(deps, opponent, message);
   }
+}
+
+async function tryPost(
+  deps: LambdaHandlerDeps,
+  connection: ConnectionRecord,
+  message: WebSocketServerMessage,
+) {
+  try {
+    await post(deps, connection.connectionId, message);
+    return true;
+  } catch (error) {
+    if (!isGoneError(error)) throw error;
+    await deps.connections.save({
+      ...connection,
+      status: 'disconnected',
+      lastSeenAt: nowIso(),
+    });
+    return false;
+  }
+}
+
+function isGoneError(error: unknown) {
+  const candidate = error as { statusCode?: unknown; code?: unknown; message?: unknown };
+  return (
+    candidate?.statusCode === 410 ||
+    candidate?.code === 'GoneException' ||
+    candidate?.message === '410'
+  );
 }
 
 function toLambdaError(error: unknown): LambdaResponse {

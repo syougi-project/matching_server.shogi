@@ -12,7 +12,7 @@ import {
   type DynamoRuntimeTableNames,
 } from '@/repositories/dynamodb/schema';
 import type { DynamoCommand, DynamoDocumentClientLike } from '@/repositories/dynamodb/client';
-import type { MatchSession } from '@/types/domain';
+import type { ConnectionRecord, MatchSession } from '@/types/domain';
 import type { WebSocketServerMessage } from '@/types/protocol';
 
 declare const require: any;
@@ -150,10 +150,8 @@ async function postToUser(userId: string, message: WebSocketServerMessage, match
   const connection = await connections.findByUserId(userId);
   if (!connection || connection.status !== 'connected') return;
 
-  await createManagementApi().postToConnection({
-    connectionId: connection.connectionId,
-    data: JSON.stringify(message),
-  });
+  const delivered = await tryPostToConnection(connection, message);
+  if (!delivered) return;
 
   if (connection.currentMatchId !== match.matchId) {
     await connections.save({
@@ -161,6 +159,36 @@ async function postToUser(userId: string, message: WebSocketServerMessage, match
       currentMatchId: match.matchId,
     });
   }
+}
+
+async function tryPostToConnection(
+  connection: ConnectionRecord,
+  message: WebSocketServerMessage,
+) {
+  try {
+    await createManagementApi().postToConnection({
+      connectionId: connection.connectionId,
+      data: JSON.stringify(message),
+    });
+    return true;
+  } catch (error) {
+    if (!isGoneError(error)) throw error;
+    await connections.save({
+      ...connection,
+      status: 'disconnected',
+      lastSeenAt: new Date().toISOString(),
+    });
+    return false;
+  }
+}
+
+function isGoneError(error: unknown) {
+  const candidate = error as { statusCode?: unknown; code?: unknown; message?: unknown };
+  return (
+    candidate?.statusCode === 410 ||
+    candidate?.code === 'GoneException' ||
+    candidate?.message === '410'
+  );
 }
 
 function requiredEnv(name: string) {
