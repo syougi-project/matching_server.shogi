@@ -3,6 +3,7 @@ set -euo pipefail
 
 terraform_dir="${1:-infra/terraform}"
 name_prefix="${TF_IMPORT_NAME_PREFIX:-matching-server-shogi}"
+lambda_function_name="${TF_IMPORT_LAMBDA_FUNCTION_NAME:-manakana-shogi-matching-api}"
 
 if ! command -v terraform >/dev/null 2>&1; then
   echo "terraform command not found" >&2
@@ -104,7 +105,7 @@ else
   echo "skip aws_dynamodb_table.queue_lookup: $queue_lookup_name does not exist"
 fi
 
-log_group_name="/aws/lambda/${name_prefix}-websocket"
+log_group_name="/aws/lambda/${lambda_function_name}"
 if resource_exists log-group "$log_group_name"; then
   try_import "aws_cloudwatch_log_group.lambda" "$log_group_name"
 else
@@ -133,7 +134,7 @@ else
   echo "skip aws_iam_role_policy_attachment.lambda: role or policy missing"
 fi
 
-function_name="${name_prefix}-websocket"
+function_name="$lambda_function_name"
 if resource_exists lambda "$function_name"; then
   try_import "aws_lambda_function.websocket" "$function_name"
 else
