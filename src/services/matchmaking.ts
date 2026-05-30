@@ -61,7 +61,16 @@ export class MatchmakingService {
       return null;
     }
 
-    const match = await this.createMatch(seed, opponent);
+    let match: MatchSession;
+    try {
+      match = await this.createMatch(seed, opponent);
+    } catch (error) {
+      await Promise.all([
+        this.queueRepository.releaseReservation(seed.queueEntryId, seedToken),
+        this.queueRepository.releaseReservation(opponent.queueEntryId, opponentToken),
+      ]);
+      throw error;
+    }
     const matchedAt = nowIso();
     await this.queueRepository.markMatched(seed.queueEntryId, match.matchId, matchedAt);
     await this.queueRepository.markMatched(opponent.queueEntryId, match.matchId, matchedAt);
