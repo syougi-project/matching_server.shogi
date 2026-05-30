@@ -74,6 +74,9 @@ jobs:
         working-directory: infra/terraform
         run: terraform init
 
+      - name: Import Existing Terraform Resources
+        run: ./scripts/terraform-import-existing.sh
+
       - name: Terraform Validate
         working-directory: infra/terraform
         run: terraform validate
@@ -124,6 +127,9 @@ jobs:
       - name: Terraform Init
         working-directory: infra/terraform
         run: terraform init
+
+      - name: Import Existing Terraform Resources
+        run: ./scripts/terraform-import-existing.sh
 
       - name: Terraform Apply
         working-directory: infra/terraform
