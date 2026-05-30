@@ -67,21 +67,3 @@ variable "app_shogi_root" {
   description = "Optional app.shogi root path for non-Lambda local compatibility. Leave empty for Lambda."
   default     = ""
 }
-
-variable "matchmaking_worker_rate_expression" {
-  type        = string
-  description = "EventBridge schedule for matchmaking worker."
-  default     = "rate(10 seconds)"
-}
-
-variable "reconnect_timeout_worker_rate_expression" {
-  type        = string
-  description = "EventBridge schedule for reconnect timeout worker."
-  default     = "rate(1 minute)"
-}
-
-variable "outbox_worker_rate_expression" {
-  type        = string
-  description = "EventBridge schedule for outbox delivery worker."
-  default     = "rate(1 minute)"
-}

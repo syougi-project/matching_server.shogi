@@ -6,7 +6,6 @@ This stack provisions the AWS runtime for the online match server:
 - Lambda handler for `$connect`, `$disconnect`, and message routes
 - DynamoDB runtime tables with TTL enabled
 - IAM permissions for DynamoDB, CloudWatch Logs, and `execute-api:ManageConnections`
-- EventBridge schedules for matchmaking, reconnect timeout, and outbox workers
 
 DynamoDB is intentionally used only for temporary runtime state. Durable records remain in `bff.shogi` / Postgres.
 
