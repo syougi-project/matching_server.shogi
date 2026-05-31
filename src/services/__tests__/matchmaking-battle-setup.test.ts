@@ -15,6 +15,9 @@ const config = {
   ratingBucketSize: 100,
   reconnectGraceSeconds: 30,
   queueTtlSeconds: 120,
+  matchmakingBatchSize: 20,
+  matchmakingBucketScanLimit: 50,
+  matchmakingBucketCandidateLimit: 25,
   bffBaseUrl: null,
 } as const;
 

@@ -2,6 +2,9 @@ export type MatchingServerConfig = {
   ratingBucketSize: number;
   reconnectGraceSeconds: number;
   queueTtlSeconds: number;
+  matchmakingBatchSize: number;
+  matchmakingBucketScanLimit: number;
+  matchmakingBucketCandidateLimit: number;
   bffBaseUrl: string | null;
   matchingTicketSecret?: string | null;
   bffInternalToken?: string | null;
@@ -14,6 +17,9 @@ export function loadConfig(env = process.env): MatchingServerConfig {
     ratingBucketSize: parsePositiveInt(env.MATCHING_RATING_BUCKET_SIZE, 100),
     reconnectGraceSeconds: parsePositiveInt(env.MATCHING_RECONNECT_GRACE_SECONDS, 30),
     queueTtlSeconds: parsePositiveInt(env.MATCHING_QUEUE_TTL_SECONDS, 120),
+    matchmakingBatchSize: parsePositiveInt(env.MATCHING_BATCH_SIZE, 20),
+    matchmakingBucketScanLimit: parsePositiveInt(env.MATCHING_BUCKET_SCAN_LIMIT, 50),
+    matchmakingBucketCandidateLimit: parsePositiveInt(env.MATCHING_BUCKET_CANDIDATE_LIMIT, 25),
     bffBaseUrl: normalizeUrl(env.MATCHING_BFF_BASE_URL),
     matchingTicketSecret: normalizeSecret(env.MATCHING_TICKET_SECRET),
     bffInternalToken: normalizeSecret(env.MATCHING_BFF_INTERNAL_TOKEN),

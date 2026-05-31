@@ -39,6 +39,42 @@ variable "lambda_memory_mb" {
   default     = 512
 }
 
+variable "matchmaking_batch_size" {
+  type        = number
+  description = "Maximum matches a matchmaking worker invocation creates."
+  default     = 20
+}
+
+variable "matchmaking_bucket_scan_limit" {
+  type        = number
+  description = "Maximum queue lookup rows read while discovering waiting rating buckets."
+  default     = 50
+}
+
+variable "matchmaking_bucket_candidate_limit" {
+  type        = number
+  description = "Maximum queue lookup rows read from a single rating bucket."
+  default     = 25
+}
+
+variable "matchmaking_sqs_batch_size" {
+  type        = number
+  description = "SQS messages delivered to one matchmaking worker invocation."
+  default     = 10
+}
+
+variable "matchmaking_worker_max_concurrency" {
+  type        = number
+  description = "Maximum concurrent Lambda invocations for SQS-driven matchmaking workers."
+  default     = 2
+}
+
+variable "matchmaking_queue_visibility_timeout_seconds" {
+  type        = number
+  description = "Visibility timeout for matchmaking request messages."
+  default     = 180
+}
+
 variable "stage_name" {
   type        = string
   description = "API Gateway WebSocket stage name."

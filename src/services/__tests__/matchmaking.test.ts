@@ -27,6 +27,23 @@ describe('MatchmakingService', () => {
     expect(pending[0]?.eventType).toBe('match.started');
   });
 
+  test('creates multiple matches in one batch', async () => {
+    const context = createServerContext();
+
+    for (let index = 1; index <= 4; index += 1) {
+      await context.services.queue.enterQueue({
+        userId: `user-${index}`,
+        connectionId: `conn-${index}`,
+        rating: 1500,
+      });
+    }
+
+    const matches = await context.services.matchmaking.runBatch(2);
+
+    expect(matches).toHaveLength(2);
+    expect(new Set(matches.map((match) => match.matchId)).size).toBe(2);
+  });
+
   test('expands buckets from nearest outward', () => {
     expect(expandBuckets(1500, 100, [1300, 1400, 1500, 1700])).toEqual([1500, 1400, 1300, 1700]);
   });

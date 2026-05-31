@@ -1,5 +1,6 @@
 import { DomainError } from '@/lib/errors';
 import { verifyMatchmakingTicket } from '@/lib/matchmaking-ticket';
+import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
 import { nowIso } from '@/lib/time';
 import type { ConnectionRepository } from '@/repositories/contracts';
 import { MatchingCore } from '@/server/matching-core';
@@ -30,10 +31,11 @@ export type LambdaHandlerDeps = {
   connections: ConnectionRepository;
   managementApi: ApiGatewayManagementClientLike;
   ticketSecret: string;
+  matchmakingRequests?: MatchmakingRequestPublisher | null;
 };
 
 export function createWebSocketLambdaHandlers(deps: LambdaHandlerDeps) {
-  const core = new MatchingCore(deps.context);
+  const core = new MatchingCore(deps.context, deps.matchmakingRequests ?? null);
 
   return {
     connect: (event: ApiGatewayWebSocketEvent) => connect(event, deps),

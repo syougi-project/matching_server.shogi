@@ -20,10 +20,32 @@ type BffPieceCatalogResponse = {
   }>;
 };
 
+const PIECE_CATALOG_CACHE_TTL_MS = 60_000;
+
 export class BffPieceCatalogProvider implements PieceCatalogProvider {
+  private cachedPieces: PieceDefinition[] | null = null;
+  private cachedAt = 0;
+  private inFlight: Promise<PieceDefinition[]> | null = null;
+
   constructor(private readonly baseUrl: string) {}
 
   async listPieces(): Promise<PieceDefinition[]> {
+    const now = Date.now();
+    if (this.cachedPieces && now - this.cachedAt < PIECE_CATALOG_CACHE_TTL_MS) {
+      return this.cachedPieces.map(clonePieceDefinition);
+    }
+    if (this.inFlight) return (await this.inFlight).map(clonePieceDefinition);
+
+    this.inFlight = this.fetchPieces().finally(() => {
+      this.inFlight = null;
+    });
+    const pieces = await this.inFlight;
+    this.cachedPieces = pieces;
+    this.cachedAt = Date.now();
+    return pieces.map(clonePieceDefinition);
+  }
+
+  private async fetchPieces(): Promise<PieceDefinition[]> {
     const response = await fetchJson<BffPieceCatalogResponse>(
       `${this.baseUrl}/api/v1/pieces/catalog`,
     );
@@ -47,6 +69,34 @@ export class BffPieceCatalogProvider implements PieceCatalogProvider {
         ),
       }));
   }
+}
+
+function clonePieceDefinition(piece: PieceDefinition): PieceDefinition {
+  return {
+    ...piece,
+    moveVectors: piece.moveVectors.map((vector) => ({ ...vector })),
+    moveConstraints: piece.moveConstraints ? { ...piece.moveConstraints } : null,
+    moveRules: piece.moveRules?.map((rule) => ({ ...rule, params: { ...rule.params } })) ?? [],
+    skillDefinitionsV2: piece.skillDefinitionsV2
+      ? {
+          definitions: piece.skillDefinitionsV2.definitions.map((definition) => ({
+            ...definition,
+            pieceCodes: definition.pieceCodes ? [...definition.pieceCodes] : undefined,
+            pieceChars: definition.pieceChars ? [...definition.pieceChars] : undefined,
+            trigger: { ...definition.trigger },
+            conditions: definition.conditions.map((condition) => ({
+              ...condition,
+              params: condition.params ? { ...condition.params } : undefined,
+            })),
+            effects: definition.effects.map((effect) => ({
+              ...effect,
+              target: effect.target ? { ...effect.target } : undefined,
+              params: effect.params ? { ...effect.params } : undefined,
+            })),
+          })),
+        }
+      : null,
+  };
 }
 
 function normalizeSkillDefinitions(raw: unknown): PieceDefinition['skillDefinitionsV2'] {

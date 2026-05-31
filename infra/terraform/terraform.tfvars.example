@@ -16,6 +16,9 @@ stage_name = "dev"
 # Generate them with:
 #   bun run tf:sync-env
 
-matchmaking_worker_rate_expression        = "rate(10 seconds)"
-reconnect_timeout_worker_rate_expression  = "rate(1 minute)"
-outbox_worker_rate_expression             = "rate(1 minute)"
+matchmaking_batch_size                     = 20
+matchmaking_bucket_scan_limit              = 50
+matchmaking_bucket_candidate_limit         = 25
+matchmaking_sqs_batch_size                 = 10
+matchmaking_worker_max_concurrency         = 2
+matchmaking_queue_visibility_timeout_seconds = 180

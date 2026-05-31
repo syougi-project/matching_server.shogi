@@ -1,6 +1,7 @@
 import { createServerContext } from '@/server/context';
 import { buildMatchStartedBroadcasts } from '@/server/matching-core';
 import { createWebSocketLambdaHandlers, type ApiGatewayWebSocketEvent } from '@/lambda/handlers';
+import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
 import {
   DynamoConnectionRepository,
   DynamoIntegrationEventRepository,
@@ -19,6 +20,13 @@ declare const require: any;
 
 type WorkerEvent = {
   worker?: 'matchmaking' | 'reconnect_timeout' | 'outbox';
+};
+
+type SqsEvent = {
+  Records: Array<{
+    eventSource?: string;
+    body?: string;
+  }>;
 };
 
 type LambdaResponse = {
@@ -50,9 +58,12 @@ const handlers = createWebSocketLambdaHandlers({
   connections,
   ticketSecret: requiredEnv('MATCHING_TICKET_SECRET'),
   managementApi: createManagementApi(),
+  matchmakingRequests: createMatchmakingRequestPublisher(),
 });
 
-export async function handler(event: ApiGatewayWebSocketEvent | WorkerEvent): Promise<LambdaResponse> {
+export async function handler(
+  event: ApiGatewayWebSocketEvent | WorkerEvent | SqsEvent,
+): Promise<LambdaResponse> {
   if (isWebSocketEvent(event)) {
     switch (event.requestContext.routeKey) {
       case '$connect':
@@ -64,9 +75,13 @@ export async function handler(event: ApiGatewayWebSocketEvent | WorkerEvent): Pr
     }
   }
 
+  if (isSqsEvent(event)) {
+    return runMatchmakingBatchWorker(event.Records.length);
+  }
+
   switch (event.worker) {
     case 'matchmaking':
-      return runMatchmakingWorker();
+      return runMatchmakingBatchWorker();
     case 'reconnect_timeout':
       return { statusCode: 200, body: 'noop reconnect timeout worker' };
     case 'outbox':
@@ -133,17 +148,44 @@ function createManagementApi() {
   };
 }
 
-async function runMatchmakingWorker(): Promise<LambdaResponse> {
-  const match = await context.services.matchmaking.runOnce();
-  if (!match) {
+function createMatchmakingRequestPublisher(): MatchmakingRequestPublisher | null {
+  const queueUrl = process.env.MATCHING_MATCHMAKING_QUEUE_URL?.trim();
+  if (!queueUrl) return null;
+  const sqs = new AWS.SQS();
+  return {
+    async requestMatchmaking(input: { queueEntryId: string; ratingBucket: number }) {
+      await sqs
+        .sendMessage({
+          QueueUrl: queueUrl,
+          MessageBody: JSON.stringify({
+            type: 'matchmaking_requested',
+            queueEntryId: input.queueEntryId,
+            ratingBucket: input.ratingBucket,
+            requestedAt: new Date().toISOString(),
+          }),
+        })
+        .promise();
+    },
+  };
+}
+
+async function runMatchmakingBatchWorker(requestCount = 1): Promise<LambdaResponse> {
+  const maxMatches = Math.max(
+    context.config.matchmakingBatchSize,
+    requestCount > 0 ? Math.ceil(requestCount / 2) : 1,
+  );
+  const matches = await context.services.matchmaking.runBatch(maxMatches);
+  if (matches.length === 0) {
     return { statusCode: 200, body: 'no match' };
   }
 
-  for (const broadcast of buildMatchStartedBroadcasts(match)) {
-    await postToUser(broadcast.userId, broadcast.message, match);
+  for (const match of matches) {
+    for (const broadcast of buildMatchStartedBroadcasts(match)) {
+      await postToUser(broadcast.userId, broadcast.message, match);
+    }
   }
 
-  return { statusCode: 200, body: match.matchId };
+  return { statusCode: 200, body: matches.map((match) => match.matchId).join(',') };
 }
 
 async function postToUser(userId: string, message: WebSocketServerMessage, match: MatchSession) {
@@ -199,6 +241,18 @@ function requiredEnv(name: string) {
   return value;
 }
 
-function isWebSocketEvent(event: ApiGatewayWebSocketEvent | WorkerEvent): event is ApiGatewayWebSocketEvent {
+function isWebSocketEvent(
+  event: ApiGatewayWebSocketEvent | WorkerEvent | SqsEvent,
+): event is ApiGatewayWebSocketEvent {
   return typeof event === 'object' && event != null && 'requestContext' in event;
+}
+
+function isSqsEvent(event: ApiGatewayWebSocketEvent | WorkerEvent | SqsEvent): event is SqsEvent {
+  return (
+    typeof event === 'object' &&
+    event != null &&
+    'Records' in event &&
+    Array.isArray(event.Records) &&
+    event.Records.some((record) => record?.eventSource === 'aws:sqs')
+  );
 }

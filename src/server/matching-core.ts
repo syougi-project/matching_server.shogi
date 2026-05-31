@@ -1,4 +1,5 @@
 import type { ServerContext } from '@/server/context';
+import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import { handleWebSocketMessage, profileFor } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
@@ -11,18 +12,20 @@ import type {
 } from '@/types/protocol';
 
 export class MatchingCore {
-  constructor(private readonly context: ServerContext) {}
+  constructor(
+    private readonly context: ServerContext,
+    private readonly matchmakingRequests: MatchmakingRequestPublisher | null = null,
+  ) {}
 
   async handleClientMessage(connectionId: string, message: WebSocketClientMessage) {
     const response = await handleWebSocketMessage(this.context, connectionId, message);
     const broadcasts: Array<{ userId: string; message: WebSocketServerMessage }> = [];
 
     if (message.action === 'enter_queue') {
-      const match = await this.context.services.matchmaking.runOnce();
-      if (match) {
-        broadcasts.push(...buildMatchStartedBroadcasts(match));
+      if (response.type === 'queue_entered') {
+        await this.requestMatchmaking(response.queueEntryId, response.ratingBucket);
       }
-      return { response, broadcasts, match };
+      return { response, broadcasts, match: null };
     }
 
     if (message.action === 'make_move' && response.type === 'game_state_updated') {
@@ -49,6 +52,18 @@ export class MatchingCore {
     }
 
     return { response, broadcasts, match: null };
+  }
+
+  private async requestMatchmaking(queueEntryId: string, ratingBucket: number) {
+    if (!this.matchmakingRequests) return;
+    try {
+      await this.matchmakingRequests.requestMatchmaking({ queueEntryId, ratingBucket });
+    } catch (error) {
+      console.error(
+        '[matching_server] failed to enqueue matchmaking request:',
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   async reconnect(matchId: string, userId: string, connectionId: string) {

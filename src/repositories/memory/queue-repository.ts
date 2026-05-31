@@ -26,18 +26,20 @@ export class InMemoryQueueRepository implements QueueRepository {
     return this.byId.get(queueEntryId) ?? null;
   }
 
-  async listWaitingBuckets() {
+  async listWaitingBuckets(limit?: number) {
     const buckets = new Set<number>();
     for (const entry of this.byId.values()) {
       if (entry.status === 'waiting') buckets.add(entry.ratingBucket);
     }
-    return Array.from(buckets).sort((a, b) => a - b);
+    const ordered = Array.from(buckets).sort((a, b) => a - b);
+    return limit && limit > 0 ? ordered.slice(0, limit) : ordered;
   }
 
-  async listWaitingByBucket(bucket: number) {
-    return Array.from(this.byId.values())
+  async listWaitingByBucket(bucket: number, limit?: number) {
+    const entries = Array.from(this.byId.values())
       .filter((entry) => entry.status === 'waiting' && entry.ratingBucket === bucket)
       .sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
+    return limit && limit > 0 ? entries.slice(0, limit) : entries;
   }
 
   async reserveWaitingEntry(queueEntryId: string, matchingToken: string) {

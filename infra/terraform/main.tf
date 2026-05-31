@@ -53,10 +53,20 @@ locals {
     MATCHING_RATING_BUCKET_SIZE             = "100"
     MATCHING_RECONNECT_GRACE_SECONDS        = "30"
     MATCHING_QUEUE_TTL_SECONDS              = "120"
+    MATCHING_BATCH_SIZE                     = tostring(var.matchmaking_batch_size)
+    MATCHING_BUCKET_SCAN_LIMIT              = tostring(var.matchmaking_bucket_scan_limit)
+    MATCHING_BUCKET_CANDIDATE_LIMIT         = tostring(var.matchmaking_bucket_candidate_limit)
+    MATCHING_MATCHMAKING_QUEUE_URL          = aws_sqs_queue.matchmaking_requests.url
     AWS_NODEJS_CONNECTION_REUSE_ENABLED     = "1"
     API_GATEWAY_WEBSOCKET_MANAGEMENT_DOMAIN = "${aws_apigatewayv2_api.websocket.id}.execute-api.${var.aws_region}.amazonaws.com"
     API_GATEWAY_WEBSOCKET_STAGE             = var.stage_name
   }
+}
+
+resource "aws_sqs_queue" "matchmaking_requests" {
+  name                       = "${var.name_prefix}-matchmaking-requests"
+  visibility_timeout_seconds = max(var.matchmaking_queue_visibility_timeout_seconds, var.lambda_timeout_seconds * 6)
+  message_retention_seconds  = 1200
 }
 
 resource "aws_dynamodb_table" "runtime" {
@@ -229,6 +239,18 @@ data "aws_iam_policy_document" "lambda" {
   }
 
   statement {
+    actions = [
+      "sqs:SendMessage",
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility",
+    ]
+
+    resources = [aws_sqs_queue.matchmaking_requests.arn]
+  }
+
+  statement {
     actions = ["execute-api:ManageConnections"]
 
     resources = [
@@ -333,4 +355,15 @@ resource "aws_lambda_permission" "api_gateway" {
   function_name = aws_lambda_function.websocket.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.websocket.execution_arn}/*/*"
+}
+
+resource "aws_lambda_event_source_mapping" "matchmaking_requests" {
+  event_source_arn = aws_sqs_queue.matchmaking_requests.arn
+  function_name    = aws_lambda_function.websocket.arn
+  batch_size       = var.matchmaking_sqs_batch_size
+  enabled          = true
+
+  scaling_config {
+    maximum_concurrency = var.matchmaking_worker_max_concurrency
+  }
 }

@@ -23,3 +23,7 @@ output "lambda_function_name" {
 output "lambda_role_arn" {
   value = aws_iam_role.lambda.arn
 }
+
+output "matchmaking_queue_url" {
+  value = aws_sqs_queue.matchmaking_requests.url
+}

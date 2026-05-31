@@ -117,13 +117,14 @@ export class DynamoQueueRepository implements QueueRepository {
     return result.Item ?? null;
   }
 
-  async listWaitingBuckets() {
+  async listWaitingBuckets(limit?: number) {
     const result = await this.options.client.send<{ Items?: Array<{ ratingBucket: number }> }>(
       queryCommand({
         TableName: this.options.tables.queueLookup,
         IndexName: 'waiting-buckets-index',
         KeyConditionExpression: 'queueStatus = :status',
         ExpressionAttributeValues: { ':status': 'waiting' },
+        Limit: limit && limit > 0 ? limit : undefined,
       }),
     );
     return Array.from(new Set((result.Items ?? []).map((item) => item.ratingBucket))).sort(
@@ -131,13 +132,14 @@ export class DynamoQueueRepository implements QueueRepository {
     );
   }
 
-  async listWaitingByBucket(bucket: number) {
+  async listWaitingByBucket(bucket: number, limit?: number) {
     const result = await this.options.client.send<{ Items?: Array<{ queueEntryId: string }> }>(
       queryCommand({
         TableName: this.options.tables.queueLookup,
         KeyConditionExpression: 'statusBucket = :statusBucket',
         ExpressionAttributeValues: { ':statusBucket': queueStatusBucket('waiting', bucket) },
         ScanIndexForward: true,
+        Limit: limit && limit > 0 ? limit : undefined,
       }),
     );
     const entries = await Promise.all(

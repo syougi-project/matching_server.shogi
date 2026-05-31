@@ -23,7 +23,9 @@ export class MatchmakingService {
   ) {}
 
   async runOnce() {
-    const buckets = await this.queueRepository.listWaitingBuckets();
+    const buckets = await this.queueRepository.listWaitingBuckets(
+      this.config.matchmakingBucketScanLimit,
+    );
     for (const bucket of buckets) {
       const created = await this.tryCreateMatchFromBucket(bucket, buckets);
       if (created) return created;
@@ -31,8 +33,22 @@ export class MatchmakingService {
     return null;
   }
 
+  async runBatch(maxMatches = this.config.matchmakingBatchSize) {
+    const matches: MatchSession[] = [];
+    const limit = Math.max(1, Math.floor(maxMatches));
+    for (let index = 0; index < limit; index += 1) {
+      const match = await this.runOnce();
+      if (!match) break;
+      matches.push(match);
+    }
+    return matches;
+  }
+
   private async tryCreateMatchFromBucket(bucket: number, allBuckets: number[]) {
-    const seedCandidates = await this.queueRepository.listWaitingByBucket(bucket);
+    const seedCandidates = await this.queueRepository.listWaitingByBucket(
+      bucket,
+      this.config.matchmakingBucketCandidateLimit,
+    );
     for (const seed of seedCandidates) {
       const match = await this.tryCreateMatchForSeed(seed, allBuckets);
       if (match) return match;
@@ -112,7 +128,10 @@ export class MatchmakingService {
   private async findOpponent(seed: QueueEntry, allBuckets: number[]) {
     const orderedBuckets = expandBuckets(seed.ratingBucket, this.config.ratingBucketSize, allBuckets);
     for (const bucket of orderedBuckets) {
-      const entries = await this.queueRepository.listWaitingByBucket(bucket);
+      const entries = await this.queueRepository.listWaitingByBucket(
+        bucket,
+        this.config.matchmakingBucketCandidateLimit,
+      );
       const opponent = entries.find((entry) => entry.userId !== seed.userId);
       if (opponent) return opponent;
     }

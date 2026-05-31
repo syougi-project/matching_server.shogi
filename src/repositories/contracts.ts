@@ -16,8 +16,8 @@ export interface QueueRepository {
   save(entry: QueueEntry): Promise<void>;
   findActiveByUserId(userId: string): Promise<QueueEntry | null>;
   findById(queueEntryId: string): Promise<QueueEntry | null>;
-  listWaitingBuckets(): Promise<number[]>;
-  listWaitingByBucket(bucket: number): Promise<QueueEntry[]>;
+  listWaitingBuckets(limit?: number): Promise<number[]>;
+  listWaitingByBucket(bucket: number, limit?: number): Promise<QueueEntry[]>;
   reserveWaitingEntry(queueEntryId: string, matchingToken: string): Promise<boolean>;
   releaseReservation(queueEntryId: string, matchingToken: string): Promise<boolean>;
   markMatched(queueEntryId: string, matchId: string, matchedAt: string): Promise<boolean>;
