@@ -50,11 +50,88 @@ function registerPieceAliases(
   const normalized = normalizePiece(piece);
   const primaryKey = normalized.pieceCode.toUpperCase();
   piecesByCode[primaryKey] = normalized;
+  const gameCode = resolveGamePieceCode(normalized);
+  const gameNormalized =
+    gameCode === primaryKey
+      ? normalized
+      : {
+          ...normalized,
+          pieceCode: gameCode,
+          canonicalCode: gameCode,
+        };
+  piecesByCode[gameCode] = gameNormalized;
   const ch = piece.char?.trim();
   if (ch) {
-    piecesByCode[ch.toUpperCase()] = normalized;
+    piecesByCode[ch.toUpperCase()] = gameNormalized;
   }
 }
+
+function resolveGamePieceCode(piece: PieceDefinition): string {
+  const canonical = piece.canonicalCode.trim().toUpperCase();
+  const byCanonical = STANDARD_CANONICAL_TO_GAME_CODE[canonical];
+  if (byCanonical) return byCanonical;
+
+  const sfen = piece.sfenCode?.trim().toUpperCase();
+  if (sfen) {
+    const bySfen = STANDARD_SFEN_TO_GAME_CODE[sfen.replace(/^\+/, '')];
+    if (bySfen) return piece.isPromoted ? (PROMOTED_STANDARD_CODE[bySfen] ?? bySfen) : bySfen;
+  }
+
+  const byChar = STANDARD_CHAR_TO_GAME_CODE[piece.char.trim()];
+  if (byChar) return piece.isPromoted ? (PROMOTED_STANDARD_CODE[byChar] ?? byChar) : byChar;
+
+  return piece.pieceCode.trim().toUpperCase();
+}
+
+const STANDARD_CANONICAL_TO_GAME_CODE: Record<string, string> = {
+  PAWN: 'FU',
+  LANCE: 'KY',
+  KNIGHT: 'KE',
+  SILVER: 'GI',
+  GOLD: 'KI',
+  BISHOP: 'KA',
+  ROOK: 'HI',
+  KING: 'OU',
+};
+
+const STANDARD_SFEN_TO_GAME_CODE: Record<string, string> = {
+  P: 'FU',
+  L: 'KY',
+  N: 'KE',
+  S: 'GI',
+  G: 'KI',
+  B: 'KA',
+  R: 'HI',
+  K: 'OU',
+};
+
+const STANDARD_CHAR_TO_GAME_CODE: Record<string, string> = {
+  歩: 'FU',
+  香: 'KY',
+  桂: 'KE',
+  銀: 'GI',
+  金: 'KI',
+  角: 'KA',
+  飛: 'HI',
+  王: 'OU',
+  玉: 'OU',
+  と: 'TO',
+  成香: 'NY',
+  成桂: 'NK',
+  成銀: 'NG',
+  馬: 'UM',
+  龍: 'RY',
+  竜: 'RY',
+};
+
+const PROMOTED_STANDARD_CODE: Record<string, string> = {
+  FU: 'TO',
+  KY: 'NY',
+  KE: 'NK',
+  GI: 'NG',
+  KA: 'UM',
+  HI: 'RY',
+};
 
 function normalizePiece(piece: PieceDefinition): PieceDefinition {
   return {

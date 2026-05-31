@@ -43,6 +43,33 @@ describe('RuleSnapshotBuilder', () => {
     expect(snapshot.skillDefinitions[0]?.pieceCodes).toEqual(['MIST']);
     expect(snapshot.createdAt).toMatch(/T/);
   });
+
+  test('registers standard game-code aliases for opaque BFF piece codes', async () => {
+    const builder = new RuleSnapshotBuilder({
+      async listPieces() {
+        return [
+          {
+            pieceCode: 'piece_c518b11858f2',
+            canonicalCode: 'pawn',
+            sfenCode: 'P',
+            char: '歩',
+            name: 'Pawn',
+            skill: '',
+            moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+          },
+        ];
+      },
+    });
+
+    const snapshot = await builder.buildSnapshot();
+
+    expect(snapshot.piecesByCode.PIECE_C518B11858F2?.pieceCode).toBe('PIECE_C518B11858F2');
+    expect(snapshot.piecesByCode.FU?.pieceCode).toBe('FU');
+    expect(snapshot.piecesByCode['歩']?.pieceCode).toBe('FU');
+    expect(snapshot.piecesByCode.FU?.moveVectors).toEqual([
+      { dx: 0, dy: -1, maxStep: 1 },
+    ]);
+  });
 });
 
 describe('BffPieceCatalogProvider', () => {

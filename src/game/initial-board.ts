@@ -7,7 +7,6 @@ export function createInitialGameFromBattleSetups(input: {
   blackSetup: BattleSetupSnapshot;
   whiteSetup: BattleSetupSnapshot;
 }): GameSnapshot {
-  const allowedCodes = new Set(Object.keys(input.rules.piecesByCode));
   const boardState: Record<string, string> = {};
   const handsState: GameSnapshot['handsState'] = {
     black: {},
@@ -15,24 +14,24 @@ export function createInitialGameFromBattleSetups(input: {
   };
 
   for (const placement of input.blackSetup.boardLayout) {
-    const pieceCode = resolvePlacementPieceCode(placement.pieceCode, allowedCodes, input.rules);
+    const pieceCode = resolvePlacementPieceCode(placement.pieceCode, input.rules);
     if (!pieceCode) continue;
     boardState[toSquare(placement.row, placement.col)] = `black:${pieceCode}`;
   }
   for (const placement of input.whiteSetup.boardLayout) {
-    const pieceCode = resolvePlacementPieceCode(placement.pieceCode, allowedCodes, input.rules);
+    const pieceCode = resolvePlacementPieceCode(placement.pieceCode, input.rules);
     if (!pieceCode) continue;
     const mirrored = mirrorCell(placement.row, placement.col);
     boardState[toSquare(mirrored.row, mirrored.col)] = `white:${pieceCode}`;
   }
 
   for (const hand of input.blackSetup.handsLayout) {
-    const pieceCode = resolvePlacementPieceCode(hand.pieceCode, allowedCodes, input.rules);
+    const pieceCode = resolvePlacementPieceCode(hand.pieceCode, input.rules);
     if (!pieceCode) continue;
     handsState.black[pieceCode] = (handsState.black[pieceCode] ?? 0) + hand.count;
   }
   for (const hand of input.whiteSetup.handsLayout) {
-    const pieceCode = resolvePlacementPieceCode(hand.pieceCode, allowedCodes, input.rules);
+    const pieceCode = resolvePlacementPieceCode(hand.pieceCode, input.rules);
     if (!pieceCode) continue;
     handsState.white[pieceCode] = (handsState.white[pieceCode] ?? 0) + hand.count;
   }
@@ -60,17 +59,22 @@ function mirrorCell(row: number, col: number) {
 /** 旧デッキ保存の漢字 pieceCode などを ruleSnapshot のキーへ寄せる */
 function resolvePlacementPieceCode(
   rawCode: string,
-  allowedCodes: Set<string>,
   rules: RuleSnapshot,
 ): string | null {
   const upper = rawCode.trim().toUpperCase();
   if (!upper) return null;
-  if (allowedCodes.has(upper)) return upper;
+  const direct = rules.piecesByCode[upper];
+  if (direct) return direct.pieceCode.toUpperCase();
 
   for (const piece of Object.values(rules.piecesByCode)) {
+    if (piece.sfenCode?.trim().toUpperCase() === upper) {
+      return piece.pieceCode.toUpperCase();
+    }
+    if (piece.canonicalCode?.trim().toUpperCase() === upper) {
+      return piece.pieceCode.toUpperCase();
+    }
     if (piece.char.trim().toUpperCase() === upper) {
-      const key = piece.pieceCode.toUpperCase();
-      if (allowedCodes.has(key)) return key;
+      return piece.pieceCode.toUpperCase();
     }
   }
 
