@@ -122,6 +122,18 @@ export class MatchmakingService {
       game: initialGame,
     };
     await this.matchRepository.save(match);
+    if (black.battleSetupId && white.battleSetupId) {
+      await Promise.all([
+        this.eventPublisher.publishBattleSetupConsume({
+          battleSetupId: black.battleSetupId,
+          ownerUserId: black.userId,
+        }),
+        this.eventPublisher.publishBattleSetupConsume({
+          battleSetupId: white.battleSetupId,
+          ownerUserId: white.userId,
+        }),
+      ]);
+    }
     return match;
   }
 
@@ -147,13 +159,6 @@ export class MatchmakingService {
       this.battleSetupClient.getBattleSetup(black.battleSetupId, black.userId),
       this.battleSetupClient.getBattleSetup(white.battleSetupId, white.userId),
     ]);
-    if (typeof this.battleSetupClient.consumeBattleSetup === 'function') {
-      await Promise.all([
-        this.battleSetupClient.consumeBattleSetup(black.battleSetupId, black.userId),
-        this.battleSetupClient.consumeBattleSetup(white.battleSetupId, white.userId),
-      ]);
-    }
-
     const base = createInitialGameFromBattleSetups({
       rules: ruleSnapshot,
       blackSetup,

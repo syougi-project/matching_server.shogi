@@ -171,11 +171,15 @@ export type MatchSession = {
   game: GameSnapshot;
 };
 
-export type IntegrationEventType = 'match.started' | 'match.finished' | 'match.aborted';
+export type IntegrationEventType =
+  | 'match.started'
+  | 'match.finished'
+  | 'match.aborted'
+  | 'battle_setup.consume';
 
 export type IntegrationEvent = {
   eventId: string;
-  aggregateType: 'match';
+  aggregateType: 'match' | 'battle_setup';
   aggregateId: string;
   eventType: IntegrationEventType;
   payload: Record<string, unknown>;

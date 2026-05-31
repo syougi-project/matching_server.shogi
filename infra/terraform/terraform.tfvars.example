@@ -22,3 +22,4 @@ matchmaking_bucket_candidate_limit         = 25
 matchmaking_sqs_batch_size                 = 10
 matchmaking_worker_max_concurrency         = 2
 matchmaking_queue_visibility_timeout_seconds = 180
+outbox_worker_rate_expression              = "rate(1 minute)"

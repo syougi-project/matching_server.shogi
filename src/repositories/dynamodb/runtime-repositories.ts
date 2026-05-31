@@ -346,7 +346,58 @@ export class DynamoIntegrationEventRepository implements IntegrationEventReposit
         ExpressionAttributeValues: { ':pending': 'pending' },
       }),
     );
-    return result.Items ?? [];
+    const now = Date.now();
+    return (result.Items ?? []).filter(
+      (event) =>
+        !event.nextAttemptAt || new Date(event.nextAttemptAt).getTime() <= now,
+    );
+  }
+
+  async markDelivered(eventId: string) {
+    try {
+      await this.options.client.send(
+        updateCommand({
+          TableName: this.options.tables.outbox,
+          Key: { eventId },
+          ConditionExpression: 'attribute_exists(eventId)',
+          UpdateExpression:
+            'SET deliveryStatus = :delivered, deliveryKey = :deliveryKey REMOVE nextAttemptAt',
+          ExpressionAttributeValues: {
+            ':delivered': 'delivered',
+            ':deliveryKey': `delivered#${new Date().toISOString()}`,
+          },
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) return false;
+      throw error;
+    }
+  }
+
+  async markFailed(eventId: string, nextAttemptAt: string | null) {
+    try {
+      const next = nextAttemptAt ?? new Date().toISOString();
+      await this.options.client.send(
+        updateCommand({
+          TableName: this.options.tables.outbox,
+          Key: { eventId },
+          ConditionExpression: 'attribute_exists(eventId)',
+          UpdateExpression:
+            'SET deliveryStatus = :failed, deliveryKey = :deliveryKey, nextAttemptAt = :nextAttemptAt ADD attemptCount :one',
+          ExpressionAttributeValues: {
+            ':failed': 'pending',
+            ':deliveryKey': `pending#${next}`,
+            ':nextAttemptAt': nextAttemptAt,
+            ':one': 1,
+          },
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) return false;
+      throw error;
+    }
   }
 }
 

@@ -21,6 +21,7 @@ import type {
 } from '@/repositories/contracts';
 import { GameCommandService } from '@/services/game-command';
 import { MatchmakingService } from '@/services/matchmaking';
+import { OutboxWorkerService } from '@/services/outbox-worker';
 import { QueueService } from '@/services/queue';
 
 export type ServerContextOverrides = {
@@ -62,7 +63,6 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
     ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
     : null;
   const pvpRatingClient = BffPvpRatingClient.fromConfig(config);
-
   return {
     config,
     repositories: {
@@ -88,8 +88,12 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
         eventPublisher,
         ruleEngine,
         config,
+      ),
+      outboxWorker: new OutboxWorkerService(
+        integrationEvents,
         matchResultClient,
         pvpRatingClient,
+        battleSetupClient,
       ),
     },
   };

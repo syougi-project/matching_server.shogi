@@ -37,6 +37,8 @@ export interface MatchRepository {
 export interface IntegrationEventRepository {
   save(event: IntegrationEvent): Promise<void>;
   listPending(): Promise<IntegrationEvent[]>;
+  markDelivered(eventId: string): Promise<boolean>;
+  markFailed(eventId: string, nextAttemptAt: string | null): Promise<boolean>;
 }
 
 export type IdempotencyRecord = {

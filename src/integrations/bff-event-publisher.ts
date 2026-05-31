@@ -1,14 +1,14 @@
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/time';
 import type { IntegrationEventRepository } from '@/repositories/contracts';
-import type { IntegrationEventType, MatchSession } from '@/types/domain';
+import type { IntegrationEvent, IntegrationEventType, MatchSession } from '@/types/domain';
 
 export class BffEventPublisher {
   constructor(private readonly events: IntegrationEventRepository) {}
 
   async publishMatchEvent(match: MatchSession, eventType: IntegrationEventType) {
     const eventId = createId('evt');
-    await this.events.save({
+    await this.saveEvent({
       eventId,
       aggregateType: 'match',
       aggregateId: match.matchId,
@@ -29,5 +29,28 @@ export class BffEventPublisher {
       createdAt: nowIso(),
       idempotencyKey: `${match.matchId}:${eventType}`,
     });
+  }
+
+  async publishBattleSetupConsume(input: { battleSetupId: string; ownerUserId: string }) {
+    const eventId = createId('evt');
+    await this.saveEvent({
+      eventId,
+      aggregateType: 'battle_setup',
+      aggregateId: input.battleSetupId,
+      eventType: 'battle_setup.consume',
+      payload: {
+        battleSetupId: input.battleSetupId,
+        ownerUserId: input.ownerUserId,
+      },
+      deliveryStatus: 'pending',
+      attemptCount: 0,
+      nextAttemptAt: null,
+      createdAt: nowIso(),
+      idempotencyKey: `${input.battleSetupId}:battle_setup.consume`,
+    });
+  }
+
+  private async saveEvent(event: IntegrationEvent) {
+    await this.events.save(event);
   }
 }

@@ -85,10 +85,18 @@ export async function handler(
     case 'reconnect_timeout':
       return { statusCode: 200, body: 'noop reconnect timeout worker' };
     case 'outbox':
-      return { statusCode: 200, body: 'noop outbox worker' };
+      return runOutboxWorker();
     default:
       return { statusCode: 400, body: 'Unknown event' };
   }
+}
+
+async function runOutboxWorker(): Promise<LambdaResponse> {
+  const result = await context.services.outboxWorker.runOnce();
+  return {
+    statusCode: result.failed > 0 ? 207 : 200,
+    body: JSON.stringify(result),
+  };
 }
 
 function createRuntimeOptions() {

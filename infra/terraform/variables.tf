@@ -75,6 +75,12 @@ variable "matchmaking_queue_visibility_timeout_seconds" {
   default     = 180
 }
 
+variable "outbox_worker_rate_expression" {
+  type        = string
+  description = "EventBridge schedule expression for outbox delivery."
+  default     = "rate(1 minute)"
+}
+
 variable "stage_name" {
   type        = string
   description = "API Gateway WebSocket stage name."

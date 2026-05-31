@@ -92,11 +92,13 @@ describe('MatchmakingService battle setup integration', () => {
     });
 
     const match = await matchmaking.runOnce();
+    const pending = await eventRepository.listPending();
 
     expect(match).not.toBeNull();
     expect(match?.game.boardState['5i']).toBe('black:OU');
     expect(match?.game.boardState['5a']).toBe('white:OU');
     expect(match?.game.handsState.black.FU).toBe(2);
     expect(match?.game.handsState.white.FU).toBe(1);
+    expect(pending.filter((event) => event.eventType === 'battle_setup.consume')).toHaveLength(2);
   });
 });

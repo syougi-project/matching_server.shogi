@@ -367,3 +367,23 @@ resource "aws_lambda_event_source_mapping" "matchmaking_requests" {
     maximum_concurrency = var.matchmaking_worker_max_concurrency
   }
 }
+
+resource "aws_cloudwatch_event_rule" "outbox_worker" {
+  name                = "${var.name_prefix}-outbox-worker"
+  schedule_expression = var.outbox_worker_rate_expression
+}
+
+resource "aws_cloudwatch_event_target" "outbox_worker" {
+  rule      = aws_cloudwatch_event_rule.outbox_worker.name
+  target_id = "lambda"
+  arn       = aws_lambda_function.websocket.arn
+  input     = jsonencode({ worker = "outbox" })
+}
+
+resource "aws_lambda_permission" "outbox_worker" {
+  statement_id  = "AllowExecutionFromEventBridgeOutboxWorker"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.websocket.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.outbox_worker.arn
+}
