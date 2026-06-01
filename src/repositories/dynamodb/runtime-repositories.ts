@@ -130,7 +130,7 @@ export class DynamoQueueRepository implements QueueRepository {
     const buckets = Array.from(new Set((result.Items ?? []).map((item) => item.ratingBucket))).sort(
       (a, b) => a - b,
     );
-    return limit && limit > 0 ? buckets.slice(0, limit) : buckets;
+    return buckets;
   }
 
   async listWaitingByBucket(bucket: number, limit?: number) {

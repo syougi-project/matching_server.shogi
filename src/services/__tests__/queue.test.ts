@@ -28,22 +28,28 @@ describe('QueueService', () => {
     expect(entry.battleSetupId).toBe('bsetup_1');
   });
 
-  test('rejects duplicate active queue entries', async () => {
+  test('replaces an existing active queue entry for the same user', async () => {
     const context = createServerContext();
 
-    await context.services.queue.enterQueue({
+    const first = await context.services.queue.enterQueue({
       userId: 'user-1',
       connectionId: 'conn-1',
       rating: 1520,
     });
 
-    await expect(
-      context.services.queue.enterQueue({
-        userId: 'user-1',
-        connectionId: 'conn-2',
-        rating: 1600,
-      }),
-    ).rejects.toMatchObject({ code: 'QUEUE_ALREADY_ACTIVE' });
+    const second = await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-2',
+      rating: 1600,
+    });
+    const current = await context.repositories.queue.findActiveByUserId('user-1');
+    const old = await context.repositories.queue.findById(first.queueEntryId);
+
+    expect(second.queueEntryId).not.toBe(first.queueEntryId);
+    expect(second.connectionId).toBe('conn-2');
+    expect(second.ratingBucket).toBe(1600);
+    expect(current?.queueEntryId).toBe(second.queueEntryId);
+    expect(old?.status).toBe('cancelled');
   });
 
   test('cancels an active queue entry', async () => {

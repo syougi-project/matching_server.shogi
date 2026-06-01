@@ -21,7 +21,7 @@ export class QueueService {
   }) {
     const existing = await this.queueRepository.findActiveByUserId(input.userId);
     if (existing) {
-      throw new DomainError('QUEUE_ALREADY_ACTIVE', 'An active queue entry already exists.');
+      await this.queueRepository.cancelByUserId(input.userId);
     }
 
     const now = nowIso();
