@@ -50,6 +50,22 @@ export class InMemoryQueueRepository implements QueueRepository {
     return true;
   }
 
+  async reserveWaitingPair(
+    firstQueueEntryId: string,
+    secondQueueEntryId: string,
+    matchingToken: string,
+  ) {
+    if (firstQueueEntryId === secondQueueEntryId) return false;
+    const first = this.byId.get(firstQueueEntryId);
+    const second = this.byId.get(secondQueueEntryId);
+    if (!first || !second || first.status !== 'waiting' || second.status !== 'waiting') {
+      return false;
+    }
+    this.byId.set(firstQueueEntryId, { ...first, status: 'matching', matchingToken });
+    this.byId.set(secondQueueEntryId, { ...second, status: 'matching', matchingToken });
+    return true;
+  }
+
   async releaseReservation(queueEntryId: string, matchingToken: string) {
     const current = this.byId.get(queueEntryId);
     if (!current || current.status !== 'matching' || current.matchingToken !== matchingToken) {

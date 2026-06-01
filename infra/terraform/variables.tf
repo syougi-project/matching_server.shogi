@@ -66,7 +66,7 @@ variable "matchmaking_sqs_batch_size" {
 variable "matchmaking_worker_max_concurrency" {
   type        = number
   description = "Maximum concurrent Lambda invocations for SQS-driven matchmaking workers."
-  default     = 2
+  default     = 1
 }
 
 variable "matchmaking_queue_visibility_timeout_seconds" {

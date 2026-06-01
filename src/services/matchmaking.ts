@@ -58,24 +58,15 @@ export class MatchmakingService {
 
   private async tryCreateMatchForSeed(seed: QueueEntry, allBuckets: number[]) {
     const seedToken = createId('mtok');
-    const reservedSeed = await this.queueRepository.reserveWaitingEntry(seed.queueEntryId, seedToken);
-    if (!reservedSeed) return null;
-
     const opponent = await this.findOpponent(seed, allBuckets);
-    if (!opponent) {
-      await this.queueRepository.releaseReservation(seed.queueEntryId, seedToken);
-      return null;
-    }
+    if (!opponent) return null;
 
-    const opponentToken = createId('mtok');
-    const reservedOpponent = await this.queueRepository.reserveWaitingEntry(
+    const reservedPair = await this.queueRepository.reserveWaitingPair(
+      seed.queueEntryId,
       opponent.queueEntryId,
-      opponentToken,
+      seedToken,
     );
-    if (!reservedOpponent) {
-      await this.queueRepository.releaseReservation(seed.queueEntryId, seedToken);
-      return null;
-    }
+    if (!reservedPair) return null;
 
     let match: MatchSession;
     try {
@@ -83,7 +74,7 @@ export class MatchmakingService {
     } catch (error) {
       await Promise.all([
         this.queueRepository.releaseReservation(seed.queueEntryId, seedToken),
-        this.queueRepository.releaseReservation(opponent.queueEntryId, opponentToken),
+        this.queueRepository.releaseReservation(opponent.queueEntryId, seedToken),
       ]);
       throw error;
     }

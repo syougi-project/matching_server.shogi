@@ -19,6 +19,11 @@ export interface QueueRepository {
   listWaitingBuckets(limit?: number): Promise<number[]>;
   listWaitingByBucket(bucket: number, limit?: number): Promise<QueueEntry[]>;
   reserveWaitingEntry(queueEntryId: string, matchingToken: string): Promise<boolean>;
+  reserveWaitingPair(
+    firstQueueEntryId: string,
+    secondQueueEntryId: string,
+    matchingToken: string,
+  ): Promise<boolean>;
   releaseReservation(queueEntryId: string, matchingToken: string): Promise<boolean>;
   markMatched(queueEntryId: string, matchId: string, matchedAt: string): Promise<boolean>;
   cancelByUserId(userId: string): Promise<boolean>;

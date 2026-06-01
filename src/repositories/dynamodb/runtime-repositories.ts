@@ -13,6 +13,7 @@ import {
   queryCommand,
   updateCommand,
   deleteCommand,
+  transactWriteCommand,
   type DynamoDocumentClientLike,
 } from '@/repositories/dynamodb/client';
 import {
@@ -179,6 +180,47 @@ export class DynamoQueueRepository implements QueueRepository {
     }
   }
 
+  async reserveWaitingPair(
+    firstQueueEntryId: string,
+    secondQueueEntryId: string,
+    matchingToken: string,
+  ) {
+    if (firstQueueEntryId === secondQueueEntryId) return false;
+    try {
+      await this.options.client.send(
+        transactWriteCommand({
+          TransactItems: [firstQueueEntryId, secondQueueEntryId].map((queueEntryId) => ({
+            Update: {
+              TableName: this.options.tables.queue,
+              Key: { queueEntryId },
+              ConditionExpression: '#status = :waiting',
+              UpdateExpression: 'SET #status = :matching, matchingToken = :matchingToken',
+              ExpressionAttributeNames: { '#status': 'status' },
+              ExpressionAttributeValues: {
+                ':waiting': 'waiting',
+                ':matching': 'matching',
+                ':matchingToken': matchingToken,
+              },
+            },
+          })),
+        }),
+      );
+      const entries = await Promise.all([
+        this.findById(firstQueueEntryId),
+        this.findById(secondQueueEntryId),
+      ]);
+      await Promise.all(
+        entries
+          .filter((entry): entry is QueueEntry => entry != null)
+          .map((entry) => this.deleteQueueLookup(entry)),
+      );
+      return true;
+    } catch (error) {
+      if (isConditionalCheckFailed(error) || isTransactionCancelled(error)) return false;
+      throw error;
+    }
+  }
+
   async releaseReservation(queueEntryId: string, matchingToken: string) {
     const entry = await this.findById(queueEntryId);
     try {
@@ -309,6 +351,14 @@ export class DynamoQueueRepository implements QueueRepository {
 
 function isExpired(expiresAt: string | null) {
   return expiresAt != null && new Date(expiresAt).getTime() <= Date.now();
+}
+
+function isTransactionCancelled(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === 'TransactionCanceledException' ||
+      error.message.includes('TransactionCanceled'))
+  );
 }
 
 export class DynamoMatchRepository implements MatchRepository {

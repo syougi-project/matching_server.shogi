@@ -4,7 +4,13 @@ export type DynamoCommandInput = {
 };
 
 export type DynamoCommand = {
-  kind: 'GetCommand' | 'PutCommand' | 'UpdateCommand' | 'QueryCommand' | 'DeleteCommand';
+  kind:
+    | 'GetCommand'
+    | 'PutCommand'
+    | 'UpdateCommand'
+    | 'QueryCommand'
+    | 'DeleteCommand'
+    | 'TransactWriteCommand';
   input: DynamoCommandInput;
 };
 
@@ -32,6 +38,10 @@ export function queryCommand(input: DynamoCommandInput): DynamoCommand {
 
 export function deleteCommand(input: DynamoCommandInput): DynamoCommand {
   return { kind: 'DeleteCommand', input };
+}
+
+export function transactWriteCommand(input: DynamoCommandInput): DynamoCommand {
+  return { kind: 'TransactWriteCommand', input };
 }
 
 export function isConditionalCheckFailed(error: unknown) {
