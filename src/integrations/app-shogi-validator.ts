@@ -136,11 +136,18 @@ export class AppShogiValidatorClient {
   }
 
   private invoke(payload: Record<string, unknown>): Record<string, any> {
+    const bundledCjsAtRoot = resolve(this.appShogiRoot, 'online-move-validator.cjs');
+    const bundledAtRoot = resolve(this.appShogiRoot, 'online-move-validator.js');
     const bundled = resolve(this.appShogiRoot, 'dist/online-move-validator.js');
-    const scriptPath = existsSync(bundled)
+    const scriptPath = existsSync(bundledCjsAtRoot)
+      ? bundledCjsAtRoot
+      : existsSync(bundled)
       ? bundled
+      : existsSync(bundledAtRoot)
+        ? bundledAtRoot
       : resolve(this.appShogiRoot, 'scripts/online-move-validator.ts');
-    const proc = Bun.spawnSync(['bun', scriptPath], {
+    const command = scriptPath.endsWith('.ts') ? 'bun' : 'node';
+    const proc = Bun.spawnSync([command, scriptPath], {
       cwd: this.appShogiRoot,
       stdin: new TextEncoder().encode(JSON.stringify(payload)),
       stdout: 'pipe',
