@@ -80,6 +80,18 @@ export class MatchingCore {
 
   async disconnect(matchId: string, userId: string) {
     const match = await this.context.services.gameCommand.disconnect(matchId, userId);
+    if (match.status === 'finished') {
+      return {
+        match,
+        opponentMessage: {
+          type: 'game_finished',
+          matchId: match.matchId,
+          status: 'finished',
+          winnerUserId: match.winnerUserId,
+          reason: match.endReason ?? 'disconnect',
+        } satisfies WebSocketServerMessage,
+      };
+    }
     if (!match.reconnectDeadlineAt) return { match, opponentMessage: null };
     return {
       match,

@@ -60,7 +60,7 @@ describe('GameCommandService', () => {
     expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
   });
 
-  test('disconnect and reconnect update connection binding', async () => {
+  test('disconnect finishes match and awards win to the opponent', async () => {
     const context = createServerContext();
 
     await context.services.queue.enterQueue({
@@ -79,17 +79,14 @@ describe('GameCommandService', () => {
       match!.matchId,
       match!.playerBlackUserId,
     );
-    expect(disconnected.reconnectDeadlineAt).not.toBeNull();
-    expect(disconnected.disconnectedAtBlack).not.toBeNull();
+    const pending = await context.repositories.integrationEvents.listPending();
 
-    const reconnected = await context.services.gameCommand.reconnect(
-      match!.matchId,
-      match!.playerBlackUserId,
-      'conn-9',
-    );
-    expect(reconnected.playerBlackConnectionId).toBe('conn-9');
-    expect(reconnected.disconnectedAtBlack).toBeNull();
-    expect(reconnected.reconnectDeadlineAt).toBeNull();
+    expect(disconnected.status).toBe('finished');
+    expect(disconnected.winnerUserId).toBe(match!.playerWhiteUserId);
+    expect(disconnected.endReason).toBe('disconnect');
+    expect(disconnected.reconnectDeadlineAt).toBeNull();
+    expect(disconnected.disconnectedAtBlack).not.toBeNull();
+    expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
   });
 
   test('aborts expired reconnect and emits abort event', async () => {

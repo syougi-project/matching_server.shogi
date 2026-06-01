@@ -144,6 +144,16 @@ export function startLocalDevServer(port = 3010) {
 
           try {
             const match = await context.services.gameCommand.disconnect(matchId, userId);
+            if (match.status === 'finished') {
+              await broadcastToMatch(runtime, match, {
+                type: 'game_finished',
+                matchId: match.matchId,
+                status: 'finished',
+                winnerUserId: match.winnerUserId,
+                reason: match.endReason ?? 'disconnect',
+              });
+              return;
+            }
             const deadline = match.reconnectDeadlineAt;
             if (!deadline) return;
 

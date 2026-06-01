@@ -1,5 +1,5 @@
 import { DomainError } from '@/lib/errors';
-import { addSeconds, nowIso } from '@/lib/time';
+import { nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
@@ -115,15 +115,26 @@ export class GameCommandService {
     if (!side) {
       throw new DomainError('MATCH_ACCESS_DENIED', 'User does not belong to this match.');
     }
+    if (match.status !== 'started') {
+      return match;
+    }
+
     const now = nowIso();
-    const next: MatchSession = {
+    const winnerUserId =
+      side === 'black' ? match.playerWhiteUserId : match.playerBlackUserId;
+    const finished: MatchSession = {
       ...match,
+      status: 'finished',
+      finishedAt: now,
+      winnerUserId,
+      endReason: 'disconnect',
       disconnectedAtBlack: side === 'black' ? now : match.disconnectedAtBlack,
       disconnectedAtWhite: side === 'white' ? now : match.disconnectedAtWhite,
-      reconnectDeadlineAt: addSeconds(now, this.config.reconnectGraceSeconds),
+      reconnectDeadlineAt: null,
     };
-    await this.matchRepository.save(next);
-    return next;
+    await this.matchRepository.save(finished);
+    await this.publishFinished(finished);
+    return finished;
   }
 
   async reconnect(matchId: string, userId: string, connectionId: string) {
