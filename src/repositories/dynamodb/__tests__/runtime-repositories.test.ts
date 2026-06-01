@@ -28,6 +28,23 @@ class FakeDynamoClient implements DynamoDocumentClientLike {
       const id = key?.queueEntryId ?? key?.matchId;
       return { Item: id ? this.items.get(id) : undefined } as T;
     }
+    if (command.kind === 'QueryCommand') {
+      const indexName = command.input.IndexName;
+      const values = command.input.ExpressionAttributeValues as
+        | Record<string, string | number>
+        | undefined;
+      if (indexName === 'activeUserId-index') {
+        const userId = values?.[':userId'];
+        const items = Array.from(this.items.values()).filter(
+          (item): item is QueueEntry =>
+            typeof item === 'object' &&
+            item != null &&
+            'userId' in item &&
+            item.userId === userId,
+        );
+        return { Items: items } as T;
+      }
+    }
     return {} as T;
   }
 }
@@ -119,6 +136,49 @@ describe('DynamoQueueRepository', () => {
         },
       },
     });
+  });
+
+  test('cancels all active queue entries for the same user and deletes lookups', async () => {
+    const client = new FakeDynamoClient();
+    client.items.set('queue-old', {
+      queueEntryId: 'queue-old',
+      userId: 'user-1',
+      displayName: 'Alice',
+      rating: 1500,
+      ratingBucket: 1500,
+      status: 'waiting',
+      enqueuedAt: '2026-01-01T00:00:00.000Z',
+      matchingToken: null,
+      connectionId: 'conn-old',
+      region: null,
+      matchedAt: null,
+      matchId: null,
+      expiresAt: '2026-01-01T00:02:00.000Z',
+      battleSetupId: 'bsetup-old',
+    } satisfies QueueEntry);
+    client.items.set('queue-new', {
+      queueEntryId: 'queue-new',
+      userId: 'user-1',
+      displayName: 'Alice',
+      rating: 1600,
+      ratingBucket: 1600,
+      status: 'waiting',
+      enqueuedAt: '2026-01-01T00:10:00.000Z',
+      matchingToken: null,
+      connectionId: 'conn-new',
+      region: null,
+      matchedAt: null,
+      matchId: null,
+      expiresAt: '2026-01-01T00:12:00.000Z',
+      battleSetupId: 'bsetup-new',
+    } satisfies QueueEntry);
+    const repository = new DynamoQueueRepository({ client, tables, ttl: defaultRuntimeTtlPolicy });
+
+    const cancelled = await repository.cancelByUserId('user-1');
+
+    expect(cancelled).toBe(true);
+    expect(client.commands.filter((command) => command.kind === 'UpdateCommand')).toHaveLength(2);
+    expect(client.commands.filter((command) => command.kind === 'DeleteCommand')).toHaveLength(2);
   });
 });
 

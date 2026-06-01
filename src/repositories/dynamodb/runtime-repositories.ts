@@ -232,29 +232,43 @@ export class DynamoQueueRepository implements QueueRepository {
   }
 
   async cancelByUserId(userId: string) {
-    const entry = await this.findActiveByUserId(userId);
-    if (!entry) return false;
-    try {
-      await this.options.client.send(
-        updateCommand({
-          TableName: this.options.tables.queue,
-          Key: { queueEntryId: entry.queueEntryId },
-          ConditionExpression: '#status IN (:waiting, :matching)',
-          UpdateExpression: 'SET #status = :cancelled REMOVE matchingToken, activeUserId',
-          ExpressionAttributeNames: { '#status': 'status' },
-          ExpressionAttributeValues: {
-            ':waiting': 'waiting',
-            ':matching': 'matching',
-            ':cancelled': 'cancelled',
-          },
-        }),
-      );
-      await this.deleteQueueLookup(entry);
-      return true;
-    } catch (error) {
-      if (isConditionalCheckFailed(error)) return false;
-      throw error;
+    const result = await this.options.client.send<{ Items?: QueueEntry[] }>(
+      queryCommand({
+        TableName: this.options.tables.queue,
+        IndexName: 'activeUserId-index',
+        KeyConditionExpression: 'activeUserId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+      }),
+    );
+    const entries = (result.Items ?? []).filter(
+      (entry) => entry.status === 'waiting' || entry.status === 'matching',
+    );
+    if (entries.length === 0) return false;
+
+    let cancelled = false;
+    for (const entry of entries) {
+      try {
+        await this.options.client.send(
+          updateCommand({
+            TableName: this.options.tables.queue,
+            Key: { queueEntryId: entry.queueEntryId },
+            ConditionExpression: '#status IN (:waiting, :matching)',
+            UpdateExpression: 'SET #status = :cancelled REMOVE matchingToken, activeUserId',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: {
+              ':waiting': 'waiting',
+              ':matching': 'matching',
+              ':cancelled': 'cancelled',
+            },
+          }),
+        );
+        await this.deleteQueueLookup(entry);
+        cancelled = true;
+      } catch (error) {
+        if (!isConditionalCheckFailed(error)) throw error;
+      }
     }
+    return cancelled;
   }
 
   private async putWaitingQueueLookup(entry: QueueEntry) {
