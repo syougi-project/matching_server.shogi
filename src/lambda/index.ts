@@ -164,15 +164,21 @@ function createMatchmakingRequestPublisher(): MatchmakingRequestPublisher | null
   const sqs = new AWS.SQS();
   return {
     async requestMatchmaking(input: { queueEntryId: string; ratingBucket: number }) {
+      const requestedAt = new Date().toISOString();
       await sqs
-        .sendMessage({
+        .sendMessageBatch({
           QueueUrl: queueUrl,
-          MessageBody: JSON.stringify({
-            type: 'matchmaking_requested',
-            queueEntryId: input.queueEntryId,
-            ratingBucket: input.ratingBucket,
-            requestedAt: new Date().toISOString(),
-          }),
+          Entries: [0, 2, 10].map((delaySeconds) => ({
+            Id: `matchmaking-${delaySeconds}`,
+            DelaySeconds: delaySeconds,
+            MessageBody: JSON.stringify({
+              type: 'matchmaking_requested',
+              queueEntryId: input.queueEntryId,
+              ratingBucket: input.ratingBucket,
+              requestedAt,
+              delaySeconds,
+            }),
+          })),
         })
         .promise();
     },
