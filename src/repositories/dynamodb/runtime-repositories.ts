@@ -12,6 +12,7 @@ import {
   putCommand,
   queryCommand,
   updateCommand,
+  deleteCommand,
   type DynamoDocumentClientLike,
 } from '@/repositories/dynamodb/client';
 import {
@@ -124,12 +125,12 @@ export class DynamoQueueRepository implements QueueRepository {
         IndexName: 'waiting-buckets-index',
         KeyConditionExpression: 'queueStatus = :status',
         ExpressionAttributeValues: { ':status': 'waiting' },
-        Limit: limit && limit > 0 ? limit : undefined,
       }),
     );
-    return Array.from(new Set((result.Items ?? []).map((item) => item.ratingBucket))).sort(
+    const buckets = Array.from(new Set((result.Items ?? []).map((item) => item.ratingBucket))).sort(
       (a, b) => a - b,
     );
+    return limit && limit > 0 ? buckets.slice(0, limit) : buckets;
   }
 
   async listWaitingByBucket(bucket: number, limit?: number) {
@@ -139,21 +140,22 @@ export class DynamoQueueRepository implements QueueRepository {
         KeyConditionExpression: 'statusBucket = :statusBucket',
         ExpressionAttributeValues: { ':statusBucket': queueStatusBucket('waiting', bucket) },
         ScanIndexForward: true,
-        Limit: limit && limit > 0 ? limit : undefined,
       }),
     );
     const entries = await Promise.all(
       (result.Items ?? []).map((item) => this.findById(item.queueEntryId)),
     );
-    return entries
+    const waiting = entries
       .filter(
         (entry): entry is QueueEntry =>
           entry != null && entry.status === 'waiting' && !isExpired(entry.expiresAt),
       )
       .sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
+    return limit && limit > 0 ? waiting.slice(0, limit) : waiting;
   }
 
   async reserveWaitingEntry(queueEntryId: string, matchingToken: string) {
+    const entry = await this.findById(queueEntryId);
     try {
       await this.options.client.send(
         updateCommand({
@@ -169,6 +171,7 @@ export class DynamoQueueRepository implements QueueRepository {
           },
         }),
       );
+      if (entry) await this.deleteQueueLookup(entry);
       return true;
     } catch (error) {
       if (isConditionalCheckFailed(error)) return false;
@@ -177,6 +180,7 @@ export class DynamoQueueRepository implements QueueRepository {
   }
 
   async releaseReservation(queueEntryId: string, matchingToken: string) {
+    const entry = await this.findById(queueEntryId);
     try {
       await this.options.client.send(
         updateCommand({
@@ -192,6 +196,7 @@ export class DynamoQueueRepository implements QueueRepository {
           },
         }),
       );
+      if (entry) await this.putWaitingQueueLookup(entry);
       return true;
     } catch (error) {
       if (isConditionalCheckFailed(error)) return false;
@@ -200,6 +205,7 @@ export class DynamoQueueRepository implements QueueRepository {
   }
 
   async markMatched(queueEntryId: string, matchId: string, matchedAt: string) {
+    const entry = await this.findById(queueEntryId);
     try {
       await this.options.client.send(
         updateCommand({
@@ -217,6 +223,7 @@ export class DynamoQueueRepository implements QueueRepository {
           },
         }),
       );
+      if (entry) await this.deleteQueueLookup(entry);
       return true;
     } catch (error) {
       if (isConditionalCheckFailed(error)) return false;
@@ -242,6 +249,7 @@ export class DynamoQueueRepository implements QueueRepository {
           },
         }),
       );
+      await this.deleteQueueLookup(entry);
       return true;
     } catch (error) {
       if (isConditionalCheckFailed(error)) return false;
@@ -249,17 +257,36 @@ export class DynamoQueueRepository implements QueueRepository {
     }
   }
 
+  private async putWaitingQueueLookup(entry: QueueEntry) {
+    const ttl = entry.expiresAt
+      ? Math.floor(new Date(entry.expiresAt).getTime() / 1000)
+      : ttlEpochSeconds(Date.now(), this.options.ttl.queueTtlSeconds);
+    await this.putQueueLookup(entry, ttl);
+  }
+
   private async putQueueLookup(entry: QueueEntry, ttl: number) {
     await this.options.client.send(
       putCommand({
         TableName: this.options.tables.queueLookup,
         Item: {
-          statusBucket: queueStatusBucket(entry.status, entry.ratingBucket),
+          statusBucket: queueStatusBucket('waiting', entry.ratingBucket),
           enqueuedAtQueueEntryId: enqueuedAtQueueEntryId(entry.enqueuedAt, entry.queueEntryId),
-          queueStatus: entry.status,
+          queueStatus: 'waiting',
           ratingBucket: entry.ratingBucket,
           queueEntryId: entry.queueEntryId,
           ttl,
+        },
+      }),
+    );
+  }
+
+  private async deleteQueueLookup(entry: QueueEntry) {
+    await this.options.client.send(
+      deleteCommand({
+        TableName: this.options.tables.queueLookup,
+        Key: {
+          statusBucket: queueStatusBucket('waiting', entry.ratingBucket),
+          enqueuedAtQueueEntryId: enqueuedAtQueueEntryId(entry.enqueuedAt, entry.queueEntryId),
         },
       }),
     );

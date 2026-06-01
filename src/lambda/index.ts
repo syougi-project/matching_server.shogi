@@ -131,6 +131,8 @@ function createDocumentClient(client: any): DynamoDocumentClientLike {
           return await client.update(command.input).promise();
         case 'QueryCommand':
           return await client.query(command.input).promise();
+        case 'DeleteCommand':
+          return await client.delete(command.input).promise();
         default:
           throw new Error(`Unsupported Dynamo command: ${command.kind}`);
       }

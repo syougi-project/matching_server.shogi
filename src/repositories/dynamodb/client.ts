@@ -30,6 +30,10 @@ export function queryCommand(input: DynamoCommandInput): DynamoCommand {
   return { kind: 'QueryCommand', input };
 }
 
+export function deleteCommand(input: DynamoCommandInput): DynamoCommand {
+  return { kind: 'DeleteCommand', input };
+}
+
 export function isConditionalCheckFailed(error: unknown) {
   return (
     error instanceof Error &&
