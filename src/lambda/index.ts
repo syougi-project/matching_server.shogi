@@ -190,18 +190,36 @@ async function runMatchmakingBatchWorker(requestCount = 1): Promise<LambdaRespon
     context.config.matchmakingBatchSize,
     requestCount > 0 ? Math.ceil(requestCount / 2) : 1,
   );
-  const matches = await context.services.matchmaking.runBatch(maxMatches);
-  if (matches.length === 0) {
-    return { statusCode: 200, body: 'no match' };
-  }
 
-  for (const match of matches) {
-    for (const broadcast of buildMatchStartedBroadcasts(match)) {
-      await postToUser(broadcast.userId, broadcast.message, match);
+  const retryDelaysMs = [0, 500, 1500, 3000];
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+    const delayMs = retryDelaysMs[attempt] ?? 0;
+    if (delayMs > 0) await sleep(delayMs);
+
+    const matches = await context.services.matchmaking.runBatch(maxMatches);
+    console.info('[matching_server] matchmaking worker attempt', {
+      attempt,
+      requestCount,
+      maxMatches,
+      created: matches.length,
+      matchIds: matches.map((match) => match.matchId),
+    });
+    if (matches.length === 0) continue;
+
+    for (const match of matches) {
+      for (const broadcast of buildMatchStartedBroadcasts(match)) {
+        await postToUser(broadcast.userId, broadcast.message, match);
+      }
     }
+
+    return { statusCode: 200, body: matches.map((match) => match.matchId).join(',') };
   }
 
-  return { statusCode: 200, body: matches.map((match) => match.matchId).join(',') };
+  return { statusCode: 200, body: 'no match' };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function postToUser(userId: string, message: WebSocketServerMessage, match: MatchSession) {
