@@ -3,16 +3,25 @@ export type DynamoCommandInput = {
   [key: string]: unknown;
 };
 
-export type DynamoCommand = {
-  kind:
-    | 'GetCommand'
-    | 'PutCommand'
-    | 'UpdateCommand'
-    | 'QueryCommand'
-    | 'DeleteCommand'
-    | 'TransactWriteCommand';
-  input: DynamoCommandInput;
+export type DynamoTransactWriteInput = {
+  TransactItems: unknown[];
+  [key: string]: unknown;
 };
+
+export type DynamoCommand =
+  | {
+      kind:
+        | 'GetCommand'
+        | 'PutCommand'
+        | 'UpdateCommand'
+        | 'QueryCommand'
+        | 'DeleteCommand';
+      input: DynamoCommandInput;
+    }
+  | {
+      kind: 'TransactWriteCommand';
+      input: DynamoTransactWriteInput;
+    };
 
 export type DynamoResponse<T = Record<string, unknown>> = T;
 
@@ -40,7 +49,7 @@ export function deleteCommand(input: DynamoCommandInput): DynamoCommand {
   return { kind: 'DeleteCommand', input };
 }
 
-export function transactWriteCommand(input: DynamoCommandInput): DynamoCommand {
+export function transactWriteCommand(input: DynamoTransactWriteInput): DynamoCommand {
   return { kind: 'TransactWriteCommand', input };
 }
 

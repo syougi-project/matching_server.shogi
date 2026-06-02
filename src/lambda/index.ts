@@ -136,7 +136,7 @@ function createDocumentClient(client: any): DynamoDocumentClientLike {
         case 'TransactWriteCommand':
           return await client.transactWrite(command.input).promise();
         default:
-          throw new Error(`Unsupported Dynamo command: ${command.kind}`);
+          throw new Error('Unsupported Dynamo command');
       }
     },
   };

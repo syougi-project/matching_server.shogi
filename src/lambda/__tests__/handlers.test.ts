@@ -109,6 +109,40 @@ describe('websocket lambda handlers', () => {
       },
     });
   });
+
+  test('disconnect cancels a waiting queue entry', async () => {
+    const connections = new InMemoryConnectionRepository();
+    const context = createServerContext({ repositories: { connections } });
+    const handlers = createWebSocketLambdaHandlers({
+      context,
+      connections,
+      ticketSecret: secret,
+      managementApi: { postToConnection: async () => undefined },
+    });
+
+    const entry = await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await connections.save({
+      connectionId: 'conn-1',
+      userId: 'user-1',
+      connectedAt: '2026-05-10T00:00:00.000Z',
+      lastSeenAt: '2026-05-10T00:00:00.000Z',
+      status: 'connected',
+      currentMatchId: null,
+      sessionToken: null,
+    });
+
+    const response = await handlers.disconnect(event('conn-1', '$disconnect'));
+    const queued = await context.repositories.queue.findById(entry.queueEntryId);
+    const active = await context.repositories.queue.findActiveByUserId('user-1');
+
+    expect(response.statusCode).toBe(200);
+    expect(queued?.status).toBe('cancelled');
+    expect(active).toBeNull();
+  });
 });
 
 function event(

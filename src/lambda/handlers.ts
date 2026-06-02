@@ -113,9 +113,20 @@ async function disconnect(
     if (result.opponentMessage) {
       await postToOpponent(deps, result.match, connection.userId, result.opponentMessage);
     }
+  } else {
+    await cancelQueueOnDisconnect(deps.context, connection.userId);
   }
 
   return { statusCode: 200 };
+}
+
+async function cancelQueueOnDisconnect(context: ServerContext, userId: string) {
+  try {
+    await context.services.queue.cancelQueue(userId);
+  } catch (error) {
+    if (error instanceof DomainError && error.code === 'QUEUE_NOT_FOUND') return;
+    throw error;
+  }
 }
 
 async function message(

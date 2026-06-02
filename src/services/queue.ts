@@ -21,6 +21,12 @@ export class QueueService {
   }) {
     const existing = await this.queueRepository.findActiveByUserId(input.userId);
     if (existing) {
+      if (existing.status === 'matching') {
+        throw new DomainError(
+          'QUEUE_MATCHING_IN_PROGRESS',
+          'The queue entry is already being matched.',
+        );
+      }
       await this.queueRepository.cancelByUserId(input.userId);
     }
 

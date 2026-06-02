@@ -140,7 +140,14 @@ export function startLocalDevServer(port = 3010) {
           runtime.socketByUserId.delete(userId);
 
           const matchId = runtime.matchIdByUserId.get(userId);
-          if (!matchId) return;
+          if (!matchId) {
+            try {
+              await context.services.queue.cancelQueue(userId);
+            } catch {
+              // Ignore close-time queue cleanup failures in local runtime.
+            }
+            return;
+          }
 
           try {
             const match = await context.services.gameCommand.disconnect(matchId, userId);

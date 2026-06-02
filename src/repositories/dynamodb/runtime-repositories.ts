@@ -283,7 +283,7 @@ export class DynamoQueueRepository implements QueueRepository {
       }),
     );
     const entries = (result.Items ?? []).filter(
-      (entry) => entry.status === 'waiting' || entry.status === 'matching',
+      (entry) => entry.status === 'waiting',
     );
     if (entries.length === 0) return false;
 
@@ -294,12 +294,11 @@ export class DynamoQueueRepository implements QueueRepository {
           updateCommand({
             TableName: this.options.tables.queue,
             Key: { queueEntryId: entry.queueEntryId },
-            ConditionExpression: '#status IN (:waiting, :matching)',
+            ConditionExpression: '#status = :waiting',
             UpdateExpression: 'SET #status = :cancelled REMOVE matchingToken, activeUserId',
             ExpressionAttributeNames: { '#status': 'status' },
             ExpressionAttributeValues: {
               ':waiting': 'waiting',
-              ':matching': 'matching',
               ':cancelled': 'cancelled',
             },
           }),

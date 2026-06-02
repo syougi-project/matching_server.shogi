@@ -8,6 +8,7 @@
     "dev:ws": "bun run src/dev/server.ts",
     "build:lambda": "bash scripts/build-lambda-zip.sh",
     "smoke:match": "bun run scripts/dev-match-smoke.ts",
+    "smoke:concurrent": "bun run scripts/concurrent-match-smoke.ts",
     "smoke:stack": "bun run scripts/local-stack-smoke.ts",
     "tf:sync-env": "bun run scripts/sync-terraform-env.ts",
     "test": "bun test",

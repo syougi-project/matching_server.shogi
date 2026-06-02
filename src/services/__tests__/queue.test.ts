@@ -66,4 +66,46 @@ describe('QueueService', () => {
 
     expect(current).toBeNull();
   });
+
+  test('does not replace an entry that is already being matched', async () => {
+    const context = createServerContext();
+
+    const entry = await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1520,
+    });
+    await context.repositories.queue.reserveWaitingEntry(entry.queueEntryId, 'token-1');
+
+    await expect(
+      context.services.queue.enterQueue({
+        userId: 'user-1',
+        connectionId: 'conn-2',
+        rating: 1600,
+      }),
+    ).rejects.toMatchObject({ code: 'QUEUE_MATCHING_IN_PROGRESS' });
+
+    const current = await context.repositories.queue.findActiveByUserId('user-1');
+    expect(current?.queueEntryId).toBe(entry.queueEntryId);
+    expect(current?.status).toBe('matching');
+  });
+
+  test('does not cancel an entry that is already being matched', async () => {
+    const context = createServerContext();
+
+    const entry = await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1520,
+    });
+    await context.repositories.queue.reserveWaitingEntry(entry.queueEntryId, 'token-1');
+
+    await expect(context.services.queue.cancelQueue('user-1')).rejects.toMatchObject({
+      code: 'QUEUE_NOT_FOUND',
+    });
+
+    const current = await context.repositories.queue.findActiveByUserId('user-1');
+    expect(current?.queueEntryId).toBe(entry.queueEntryId);
+    expect(current?.status).toBe('matching');
+  });
 });

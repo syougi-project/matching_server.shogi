@@ -97,7 +97,7 @@ export class InMemoryQueueRepository implements QueueRepository {
     const queueEntryId = this.activeByUserId.get(userId);
     if (!queueEntryId) return false;
     const current = this.byId.get(queueEntryId);
-    if (!current || (current.status !== 'waiting' && current.status !== 'matching')) return false;
+    if (!current || current.status !== 'waiting') return false;
     const next: QueueEntry = { ...current, status: 'cancelled', matchingToken: null };
     this.byId.set(queueEntryId, next);
     this.activeByUserId.delete(userId);

@@ -44,6 +44,40 @@ describe('MatchmakingService', () => {
     expect(new Set(matches.map((match) => match.matchId)).size).toBe(2);
   });
 
+  test('creates only one match when workers run concurrently for the same pair', async () => {
+    const context = createServerContext();
+
+    const first = await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    const second = await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const results = await Promise.all([
+      context.services.matchmaking.runOnce(),
+      context.services.matchmaking.runOnce(),
+    ]);
+    const matches = results.filter((match) => match != null);
+    const firstEntry = await context.repositories.queue.findById(first.queueEntryId);
+    const secondEntry = await context.repositories.queue.findById(second.queueEntryId);
+
+    expect(matches).toHaveLength(1);
+    expect(results.filter((match) => match == null)).toHaveLength(1);
+    expect(new Set(matches.map((match) => match!.matchId)).size).toBe(1);
+
+    const activeUser1 = await context.repositories.queue.findActiveByUserId('user-1');
+    const activeUser2 = await context.repositories.queue.findActiveByUserId('user-2');
+    expect(activeUser1).toBeNull();
+    expect(activeUser2).toBeNull();
+    expect(firstEntry?.status).toBe('matched');
+    expect(secondEntry?.status).toBe('matched');
+  });
+
   test('expands buckets from nearest outward', () => {
     expect(expandBuckets(1500, 100, [1300, 1400, 1500, 1700])).toEqual([1500, 1400, 1300, 1700]);
   });

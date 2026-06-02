@@ -180,6 +180,33 @@ describe('DynamoQueueRepository', () => {
     expect(client.commands.filter((command) => command.kind === 'UpdateCommand')).toHaveLength(2);
     expect(client.commands.filter((command) => command.kind === 'DeleteCommand')).toHaveLength(2);
   });
+
+  test('does not cancel entries that are already being matched', async () => {
+    const client = new FakeDynamoClient();
+    client.items.set('queue-1', {
+      queueEntryId: 'queue-1',
+      userId: 'user-1',
+      displayName: 'Alice',
+      rating: 1500,
+      ratingBucket: 1500,
+      status: 'matching',
+      enqueuedAt: '2026-01-01T00:00:00.000Z',
+      matchingToken: 'token-1',
+      connectionId: 'conn-1',
+      region: null,
+      matchedAt: null,
+      matchId: null,
+      expiresAt: '2026-01-01T00:02:00.000Z',
+      battleSetupId: null,
+    } satisfies QueueEntry);
+    const repository = new DynamoQueueRepository({ client, tables, ttl: defaultRuntimeTtlPolicy });
+
+    const cancelled = await repository.cancelByUserId('user-1');
+
+    expect(cancelled).toBe(false);
+    expect(client.commands.filter((command) => command.kind === 'UpdateCommand')).toHaveLength(0);
+    expect(client.commands.filter((command) => command.kind === 'DeleteCommand')).toHaveLength(0);
+  });
 });
 
 describe('DynamoMatchRepository', () => {
