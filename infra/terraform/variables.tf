@@ -66,7 +66,12 @@ variable "matchmaking_sqs_batch_size" {
 variable "matchmaking_worker_max_concurrency" {
   type        = number
   description = "Maximum concurrent Lambda invocations for SQS-driven matchmaking workers."
-  default     = 1
+  default     = 2
+
+  validation {
+    condition     = var.matchmaking_worker_max_concurrency >= 2
+    error_message = "matchmaking_worker_max_concurrency must be at least 2 because Lambda event source mapping maximum_concurrency requires 2 or greater."
+  }
 }
 
 variable "matchmaking_queue_visibility_timeout_seconds" {
