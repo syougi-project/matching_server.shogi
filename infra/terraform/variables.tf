@@ -108,9 +108,3 @@ variable "matching_ticket_secret" {
   description = "HMAC secret used to verify BFF-issued matchmaking tickets."
   sensitive   = true
 }
-
-variable "app_shogi_root" {
-  type        = string
-  description = "Optional app.shogi root path for non-Lambda local compatibility. Leave empty for Lambda."
-  default     = ""
-}

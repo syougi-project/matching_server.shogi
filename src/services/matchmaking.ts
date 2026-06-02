@@ -3,7 +3,6 @@ import { nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { createInitialGameFromBattleSetups } from '@/game/initial-board';
-import { AppShogiRuleEngine } from '@/game/app-shogi-rule-engine';
 import type { RuleEngine } from '@/game/rule-engine';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
@@ -155,9 +154,6 @@ export class MatchmakingService {
       blackSetup,
       whiteSetup,
     });
-    if (this.ruleEngine instanceof AppShogiRuleEngine) {
-      return this.ruleEngine.attachCanonical(base, ruleSnapshot);
-    }
     return base;
   }
 }

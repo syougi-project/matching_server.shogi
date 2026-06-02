@@ -81,7 +81,6 @@ jobs:
           TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-          TF_VAR_app_shogi_root: ${{ secrets.TF_VAR_app_shogi_root }}
         run: ./scripts/terraform-import-existing.sh
 
       - name: Terraform Validate
@@ -96,7 +95,6 @@ jobs:
           TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-          TF_VAR_app_shogi_root: ${{ secrets.TF_VAR_app_shogi_root }}
         run: terraform plan -no-color
 
   apply:
@@ -142,7 +140,6 @@ jobs:
           TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-          TF_VAR_app_shogi_root: ${{ secrets.TF_VAR_app_shogi_root }}
         run: ./scripts/terraform-import-existing.sh
 
       - name: Terraform Apply
@@ -153,5 +150,4 @@ jobs:
           TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-          TF_VAR_app_shogi_root: ${{ secrets.TF_VAR_app_shogi_root }}
         run: terraform apply -auto-approve

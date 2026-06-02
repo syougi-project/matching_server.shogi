@@ -13,6 +13,7 @@ export function buildGameStateUpdatedMessage(match: MatchSession): GameStateUpda
     turn: match.game.turn,
     board: match.game.boardState,
     hands: match.game.handsState,
+    skillState: match.game.skillState,
     lastMove: match.game.lastMove,
     lastSkillTriggered: match.game.lastSkillTriggered,
     canonicalState: match.game.canonicalState,

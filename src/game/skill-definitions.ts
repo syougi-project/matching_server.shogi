@@ -1,10 +1,9 @@
 /**
- * Canonical skill definitions matching app.shogi.
+ * Canonical skill definitions used by the matching server.
  * Provides fallback definitions for clients that don't receive skill data from BFF.
  * 
  * Sources:
- * - app.shogi: src/ai/engine/session-skill-definitions-v2.ts
- * - server: matching_server.shogi (skill-runtime.ts)
+ * Keep these definitions aligned with the in-repo matching server rule engine.
  */
 
 import type { SkillDefinition } from '@/types/domain';

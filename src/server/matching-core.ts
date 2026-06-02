@@ -127,6 +127,7 @@ export function buildMatchStartedBroadcasts(match: MatchSession) {
       turn: match.game.turn,
       board: match.game.boardState,
       hands: match.game.handsState,
+      skillState: match.game.skillState,
       version: match.game.version,
       canonicalState: match.game.canonicalState,
     },

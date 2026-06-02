@@ -322,4 +322,163 @@ describe('GameCommandService', () => {
     expect(updated.game.handsState.black.GI).toBe(1);
     expect(updated.game.handsState.black.KI).toBe(1);
   });
+
+  test('applies water skill to push adjacent enemies one square away', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:SUI',
+          '4f': 'white:FU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 9,
+      },
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 9,
+      move: { from: '5e', to: '5f', piece: 'SUI' },
+    });
+
+    expect(updated.game.boardState['4f']).toBeUndefined();
+    expect(updated.game.boardState['3f']).toBe('white:FU');
+    expect(updated.game.lastSkillTriggered).toBe(true);
+  });
+
+  test('applies rainbow skill movement restriction to adjacent enemies', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:RAINBOW',
+          '4f': 'white:KA',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 10,
+      },
+    });
+
+    const restricted = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 10,
+      move: { from: '5e', to: '5f', piece: 'RAINBOW' },
+    });
+
+    expect(restricted.game.skillState?.movement_modifiers?.[0]).toMatchObject({
+      side: 'white',
+      row: 5,
+      col: 5,
+      movement_rule: 'orthogonal_step_only',
+    });
+
+    await expect(
+      context.services.gameCommand.makeMove({
+        matchId: match!.matchId,
+        userId: match!.playerWhiteUserId,
+        expectedVersion: restricted.game.version,
+        move: { from: '4f', to: '3g', piece: 'KA' },
+      }),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
+  });
+
+  test('applies poison skill trail and removes enemy landing on poison cell', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:POISON',
+          '5d': 'white:FU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 11,
+      },
+    });
+
+    const poisoned = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 11,
+      move: { from: '5e', to: '5f', piece: 'POISON' },
+    });
+
+    expect(poisoned.game.skillState?.board_hazards?.[0]).toMatchObject({
+      row: 4,
+      col: 4,
+      hazard_type: 'poison_cell',
+      affects_side: 'white',
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerWhiteUserId,
+      expectedVersion: poisoned.game.version,
+      move: { from: '5d', to: '5e', piece: 'FU' },
+    });
+
+    expect(updated.game.boardState['5e']).toBeUndefined();
+  });
+
+  test('applies glue skill so adjacent ally follows the same move vector', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:SUI',
+          '5d': 'black:GACHA_KOU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 12,
+      },
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 12,
+      move: { from: '5e', to: '4e', piece: 'SUI' },
+    });
+
+    expect(updated.game.boardState['5d']).toBeUndefined();
+    expect(updated.game.boardState['4d']).toBe('black:GACHA_KOU');
+  });
 });

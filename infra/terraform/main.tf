@@ -49,7 +49,6 @@ locals {
     MATCHING_BFF_BASE_URL                   = var.bff_base_url
     MATCHING_BFF_INTERNAL_TOKEN             = var.matching_bff_internal_token
     MATCHING_TICKET_SECRET                  = var.matching_ticket_secret
-    APP_SHOGI_ROOT                          = var.app_shogi_root
     MATCHING_RATING_BUCKET_SIZE             = "100"
     MATCHING_RECONNECT_GRACE_SECONDS        = "30"
     MATCHING_QUEUE_TTL_SECONDS              = "120"

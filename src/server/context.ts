@@ -1,11 +1,6 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { BffPieceCatalogProvider } from '@/catalog/bff-piece-catalog';
 import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
-import { AppShogiRuleEngine } from '@/game/app-shogi-rule-engine';
-import { AppShogiValidatorClient } from '@/integrations/app-shogi-validator';
 import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import { loadConfig } from '@/lib/config';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
@@ -38,7 +33,6 @@ export type ServerContextOverrides = {
 
 export function createServerContext(overrides: ServerContextOverrides = {}) {
   const config = loadConfig();
-  const appShogiRoot = config.appShogiRoot ?? findBundledAppShogiRoot();
   const connections = overrides.repositories?.connections ?? new InMemoryConnectionRepository();
   const queue = overrides.repositories?.queue ?? new InMemoryQueueRepository();
   const matches = overrides.repositories?.matches ?? new InMemoryMatchRepository();
@@ -47,18 +41,8 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
   const pieceCatalog = config.bffBaseUrl
     ? new BffPieceCatalogProvider(config.bffBaseUrl)
     : new InMemoryPieceCatalogProvider();
-  const appShogiValidator = appShogiRoot
-    ? new AppShogiValidatorClient(appShogiRoot)
-    : null;
-  const ruleSnapshotBuilder = new RuleSnapshotBuilder(
-    pieceCatalog,
-    appShogiValidator
-      ? (items) => appShogiValidator.normalizePieceCatalogItems(items)
-      : undefined,
-  );
-  const ruleEngine = appShogiValidator
-    ? new AppShogiRuleEngine(appShogiRoot!)
-    : new BasicRuleEngine();
+  const ruleSnapshotBuilder = new RuleSnapshotBuilder(pieceCatalog);
+  const ruleEngine = new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
   const battleSetupClient = config.bffBaseUrl
     ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
@@ -104,18 +88,3 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
 }
 
 export type ServerContext = ReturnType<typeof createServerContext>;
-
-function findBundledAppShogiRoot() {
-  const candidates = [
-    process.env.LAMBDA_TASK_ROOT,
-    process.cwd(),
-    __dirname,
-  ].filter((value): value is string => Boolean(value));
-  return (
-    candidates.find(
-      (dir) =>
-        existsSync(resolve(dir, 'online-move-validator.cjs')) ||
-        existsSync(resolve(dir, 'online-move-validator.js')),
-    ) ?? null
-  );
-}

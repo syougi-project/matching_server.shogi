@@ -78,5 +78,4 @@ jobs:
           TF_VAR_bff_base_url: https://placeholder.invalid
           TF_VAR_matching_bff_internal_token: placeholder
           TF_VAR_matching_ticket_secret: placeholder
-          TF_VAR_app_shogi_root: ""
         run: terraform validate

@@ -108,6 +108,13 @@ export type MovePayload = {
 export type GameSnapshot = {
   boardState: Record<string, string>;
   handsState: Record<PlayerSide, Record<string, number>>;
+  skillState?: {
+    board_hazards?: Record<string, unknown>[];
+    board_arrow_tiles?: Record<string, unknown>[];
+    movement_modifiers?: Record<string, unknown>[];
+    piece_statuses?: Record<string, unknown>[];
+    piece_defenses?: Record<string, unknown>[];
+  };
   turn: Turn;
   moveCount: number;
   version: number;

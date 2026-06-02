@@ -12,15 +12,25 @@ type InternalPiece = {
   side: PlayerSide;
   code: string;
   promoted: boolean;
+  mutantRevertCode?: string;
 };
 
 type InternalBoard = Map<string, InternalPiece>;
 
 type InternalHands = Record<PlayerSide, Record<string, number>>;
 
+type SkillState = {
+  board_hazards: Record<string, unknown>[];
+  board_arrow_tiles: Record<string, unknown>[];
+  movement_modifiers: Record<string, unknown>[];
+  piece_statuses: Record<string, unknown>[];
+  piece_defenses: Record<string, unknown>[];
+};
+
 type InternalGameState = {
   board: InternalBoard;
   hands: InternalHands;
+  skillState: SkillState;
   turn: PlayerSide;
 };
 
@@ -37,6 +47,7 @@ type AppliedStateResult =
       ok: true;
       board: InternalBoard;
       hands: InternalHands;
+      skillState: SkillState;
       skillTriggered: boolean;
     }
   | {
@@ -55,9 +66,11 @@ type MovementPattern = {
 type SkillContext = {
   board: InternalBoard;
   hands: InternalHands;
+  skillState: SkillState;
   actorSide: PlayerSide;
   movedPiece: InternalPiece;
   move: NormalizedMove;
+  fromSquare: string | null;
   capturedPiece: InternalPiece | null;
 };
 
@@ -65,6 +78,9 @@ const BOARD_SIZE = 9;
 const RANKS = 'abcdefghi';
 const GOLD_PROMOTED_CODES = new Set(['FU', 'KY', 'KE', 'GI']);
 const PROMOTABLE_DEFAULT = new Set(['FU', 'KY', 'KE', 'GI', 'KA', 'HI']);
+const STANDARD_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
+const TREASURE_REWARD_CODES = ['KI', 'GI', 'COPPER'] as const;
+const HEN_EDGES = ['top', 'bottom', 'left', 'right'] as const;
 const STANDARD_INITIAL_LAYOUT: Array<{ square: string; side: PlayerSide; code: string }> = [
   { square: '9a', side: 'white', code: 'KY' },
   { square: '8a', side: 'white', code: 'KE' },
@@ -114,6 +130,7 @@ export class BasicRuleEngine implements RuleEngine {
     return {
       boardState,
       handsState: { black: {}, white: {} },
+      skillState: createEmptySkillState(),
       turn: 'black',
       moveCount: 0,
       version: 1,
@@ -148,15 +165,18 @@ export class BasicRuleEngine implements RuleEngine {
     const nextState: InternalGameState = {
       board: applied.board,
       hands: applied.hands,
+      skillState: applied.skillState,
       turn: nextTurn,
     };
     const nextGame: GameSnapshot = {
       boardState: serializeBoard(nextState.board),
       handsState: cloneHands(nextState.hands),
+      skillState: cloneSkillState(nextState.skillState),
       turn: nextTurn,
       moveCount: input.game.moveCount + 1,
       version: input.game.version + 1,
       lastMove: toMovePayload(move),
+      lastSkillTriggered: applied.skillTriggered,
     };
 
     const opponentHasKing = findKingSquare(nextState.board, nextTurn) !== null;
@@ -203,6 +223,7 @@ function parseGameState(game: GameSnapshot): InternalGameState {
   return {
     board,
     hands: cloneHands(game.handsState),
+    skillState: parseSkillState(game.skillState),
     turn: game.turn,
   };
 }
@@ -238,6 +259,7 @@ function applyLegalMove(
     ok: true,
     board: next.board,
     hands: next.hands,
+    skillState: next.skillState,
     skillTriggered: next.skillTriggered,
   };
 }
@@ -251,7 +273,8 @@ function generateLegalMoves(
 
   for (const [square, piece] of state.board.entries()) {
     if (piece.side !== side) continue;
-    const pseudoMoves = generatePseudoMovesForPiece(state.board, rules, square, piece);
+    if (isPieceImmobilized(state.skillState, piece, square)) continue;
+    const pseudoMoves = generatePseudoMovesForPiece(state.board, state.skillState, rules, square, piece);
     for (const move of pseudoMoves) {
       const next = applyMoveUnchecked(state, rules, side, move, false);
       if (!isKingInCheck(next.board, rules, side)) {
@@ -273,6 +296,7 @@ function generateLegalMoves(
 
 function generatePseudoMovesForPiece(
   board: InternalBoard,
+  skillState: SkillState,
   rules: RuleSnapshot,
   from: string,
   piece: InternalPiece,
@@ -280,7 +304,7 @@ function generatePseudoMovesForPiece(
   const definition = resolvePieceDefinition(rules, piece);
   if (!definition) return [];
   const source = parseSquare(from);
-  const targets = getMovementTargets(board, piece.side, source, definition, piece.promoted);
+  const targets = getMovementTargets(board, skillState, rules, piece.side, source, definition, piece.promoted);
   const moves: NormalizedMove[] = [];
 
   for (const target of targets) {
@@ -315,6 +339,7 @@ function generateDropMoves(
       for (let col = 0; col < BOARD_SIZE; col += 1) {
         const square = formatSquare(row, col);
         if (state.board.has(square)) continue;
+        if (isDropBlockedBySkillState(state.skillState, side, row, col)) continue;
         if (!canDropPiece(state.board, state.hands, side, pieceCode, row, col)) continue;
         moves.push({
           from: null,
@@ -349,6 +374,8 @@ function canDropPiece(
 
 function getMovementTargets(
   board: InternalBoard,
+  skillState: SkillState,
+  rules: RuleSnapshot,
   side: PlayerSide,
   source: Square,
   definition: PieceDefinition,
@@ -363,8 +390,10 @@ function getMovementTargets(
       const col = source.col + pattern.colDelta * step;
       if (!isInsideBoard(row, col)) break;
       const square = formatSquare(row, col);
+      if (isCellBlockedByHazard(skillState, row, col)) break;
       const occupant = board.get(square);
       if (occupant?.side === side) break;
+      if (occupant && isCaptureBlocked(skillState, occupant, square)) break;
       targets.push({ row, col });
       if (occupant || !pattern.canJump && pattern.maxStep === 1) break;
       if (occupant || pattern.canJump) {
@@ -374,7 +403,7 @@ function getMovementTargets(
     }
   }
 
-  return dedupeSquares(targets);
+  return filterByMovementModifier(dedupeSquares(targets), skillState, side, source, definition.pieceCode);
 }
 
 function getPatternsForPiece(definition: PieceDefinition, promoted: boolean): MovementPattern[] {
@@ -452,8 +481,10 @@ function applyMoveUnchecked(
 ) {
   const board = cloneBoard(state.board);
   const hands = cloneHands(state.hands);
+  const skillState = cloneSkillState(state.skillState);
   let movedPiece: InternalPiece;
   let capturedPiece: InternalPiece | null = null;
+  const fromSquare = move.drop ? null : move.from;
 
   if (move.drop) {
     decrementHand(hands, actorSide, move.piece);
@@ -476,6 +507,7 @@ function applyMoveUnchecked(
       incrementHand(hands, actorSide, capturedPiece.code);
     }
     board.set(move.to, movedPiece);
+    moveAttachedSkillState(skillState, actorSide, move.from ?? '', move.to);
   }
 
   let skillTriggered = false;
@@ -483,17 +515,28 @@ function applyMoveUnchecked(
     const applied = applySkills(rules, {
       board,
       hands,
+      skillState,
       actorSide,
       movedPiece,
       move,
+      fromSquare,
       capturedPiece,
     });
     skillTriggered = applied;
   }
 
+  const landedPiece = board.get(move.to);
+  if (landedPiece?.side === actorSide && applyPoisonHazardsOnLanding(skillState, board, actorSide, move.to)) {
+    skillTriggered = true;
+  }
+  applyPassiveSkillAuras(skillState, board);
+  applyMutantReverts(board);
+  tickSkillStateDurations(skillState);
+
   return {
     board,
     hands,
+    skillState,
     turn: opposite(actorSide),
     skillTriggered,
   };
@@ -521,6 +564,8 @@ function applySkills(rules: RuleSnapshot, context: SkillContext) {
       }
     }
   }
+
+  applied = applyScriptedPieceSkills(context) || applied;
 
   return applied;
 }
@@ -582,6 +627,822 @@ function executeAdjacentEnemyCapture(context: SkillContext) {
   return removed;
 }
 
+function removeRandomAdjacentEnemyPiece(context: SkillContext) {
+  const candidates = adjacentEnemySquares(context, parseSquare(context.move.to), true);
+  const square = pickRandom(candidates);
+  if (!square) return false;
+  context.board.delete(square);
+  return true;
+}
+
+function removeUpToRandomAdjacentEnemyPieces(context: SkillContext, maxRemove: number) {
+  const candidates = adjacentEnemySquares(context, parseSquare(context.move.to), true);
+  let removed = 0;
+  while (candidates.length > 0 && removed < maxRemove) {
+    const idx = Math.floor(Math.random() * candidates.length);
+    const square = candidates.splice(idx, 1)[0];
+    if (!square) continue;
+    context.board.delete(square);
+    removed += 1;
+  }
+  return removed > 0;
+}
+
+function sendAllAdjacentEnemiesToOwnerHands(context: SkillContext) {
+  const candidates = adjacentEnemySquares(context, parseSquare(context.move.to), false);
+  for (const square of candidates) {
+    const target = context.board.get(square);
+    if (!target) continue;
+    context.board.delete(square);
+    incrementHand(context.hands, target.side, target.code);
+  }
+  return candidates.length > 0;
+}
+
+function sendRandomEnemyToOwnerHand(context: SkillContext) {
+  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
+    return piece.side !== context.actorSide && piece.code !== 'OU';
+  });
+  const selected = pickRandom(candidates);
+  if (!selected) return false;
+  const [square, piece] = selected;
+  context.board.delete(square);
+  incrementHand(context.hands, piece.side, piece.code);
+  return true;
+}
+
+function applyAdjacentEnemyStatus(context: SkillContext, statusType: string, durationTurns: number) {
+  const center = parseSquare(context.move.to);
+  let applied = false;
+  forEachAdjacent(center, (row, col) => {
+    const square = formatSquare(row, col);
+    const target = context.board.get(square);
+    if (!target || target.side === context.actorSide || target.code === 'OU') return;
+    context.skillState.piece_statuses.push({
+      row,
+      col,
+      side: target.side,
+      status_type: statusType,
+      remaining_turns: durationTurns,
+    });
+    applied = true;
+  });
+  return applied;
+}
+
+function applyRandomAdjacentEnemyStatus(context: SkillContext, statusType: string, durationTurns: number) {
+  const square = pickRandom(adjacentEnemySquares(context, parseSquare(context.move.to), true));
+  if (!square) return false;
+  const target = context.board.get(square);
+  if (!target) return false;
+  const { row, col } = parseSquare(square);
+  context.skillState.piece_statuses.push({
+    row,
+    col,
+    side: target.side,
+    status_type: statusType,
+    remaining_turns: durationTurns,
+  });
+  return true;
+}
+
+function applyRandomEnemyStatus(context: SkillContext, statusType: string, durationTurns: number) {
+  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
+    return piece.side !== context.actorSide && piece.code !== 'OU';
+  });
+  const selected = pickRandom(candidates);
+  if (!selected) return false;
+  const [square, target] = selected;
+  const { row, col } = parseSquare(square);
+  context.skillState.piece_statuses.push({
+    row,
+    col,
+    side: target.side,
+    status_type: statusType,
+    remaining_turns: durationTurns,
+  });
+  return true;
+}
+
+function transformAdjacentEnemies(context: SkillContext, toCode: string) {
+  const candidates = adjacentEnemySquares(context, parseSquare(context.move.to), true);
+  let transformed = false;
+  for (const square of candidates) {
+    const target = context.board.get(square);
+    if (!target) continue;
+    context.board.set(square, { side: target.side, code: toCode, promoted: false });
+    transformed = true;
+  }
+  return transformed;
+}
+
+function transformAdjacentEnemiesToMutant(context: SkillContext) {
+  const candidates = adjacentEnemySquares(context, parseSquare(context.move.to), true);
+  let transformed = false;
+  for (const square of candidates) {
+    const target = context.board.get(square);
+    if (!target || target.code === 'MUTANT') continue;
+    context.board.set(square, {
+      side: target.side,
+      code: 'MUTANT',
+      promoted: false,
+      mutantRevertCode: target.code,
+    });
+    transformed = true;
+  }
+  return transformed;
+}
+
+function transformRandomEnemySpecialToPawn(context: SkillContext) {
+  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
+    return piece.side !== context.actorSide && piece.code !== 'OU' && !STANDARD_CODES.has(canonicalPieceCode(piece.code));
+  });
+  const selected = pickRandom(candidates);
+  if (!selected) return false;
+  const [square, target] = selected;
+  context.board.set(square, { side: target.side, code: 'FU', promoted: false });
+  const { row, col } = parseSquare(square);
+  context.skillState.piece_statuses.push({
+    row,
+    col,
+    side: target.side,
+    status_type: 'an_transform',
+    remaining_turns: 999,
+  });
+  return true;
+}
+
+function transformRandomAllyPawn(context: SkillContext, toCode: string) {
+  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
+    return piece.side === context.actorSide && piece.code === 'FU' && !piece.promoted;
+  });
+  const selected = pickRandom(candidates);
+  if (!selected) return false;
+  const [square, piece] = selected;
+  context.board.set(square, { side: piece.side, code: toCode, promoted: false });
+  return true;
+}
+
+function summonRandomAdjacentEmptyPiece(context: SkillContext, pieceCode: string) {
+  const center = parseSquare(context.move.to);
+  const cells = adjacentEmptySquares(context.board, center);
+  const square = pickRandom(cells);
+  if (!square) return false;
+  context.board.set(square, { side: context.actorSide, code: pieceCode, promoted: false });
+  return true;
+}
+
+function summonOrthogonalAdjacentEmptyPieces(context: SkillContext, pieceCode: string) {
+  const center = parseSquare(context.move.to);
+  let count = 0;
+  for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    const row = center.row + dr;
+    const col = center.col + dc;
+    if (!isInsideBoard(row, col)) continue;
+    const square = formatSquare(row, col);
+    if (context.board.has(square) || isCellBlockedByHazard(context.skillState, row, col)) continue;
+    context.board.set(square, { side: context.actorSide, code: pieceCode, promoted: false });
+    count += 1;
+  }
+  return count > 0;
+}
+
+function pushOrthogonalAdjacentEnemiesToEdge(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  let pushed = false;
+  for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    const sourceRow = center.row + dr;
+    const sourceCol = center.col + dc;
+    if (!isInsideBoard(sourceRow, sourceCol)) continue;
+    const source = formatSquare(sourceRow, sourceCol);
+    const target = context.board.get(source);
+    if (!target || target.side === context.actorSide) continue;
+    let row = sourceRow;
+    let col = sourceCol;
+    while (isInsideBoard(row + dr, col + dc)) {
+      const next = formatSquare(row + dr, col + dc);
+      if (context.board.has(next) || isCellBlockedByHazard(context.skillState, row + dr, col + dc)) break;
+      row += dr;
+      col += dc;
+    }
+    if (row === sourceRow && col === sourceCol) continue;
+    context.board.delete(source);
+    const dest = formatSquare(row, col);
+    context.board.set(dest, target);
+    moveAttachedSkillState(context.skillState, target.side, source, dest);
+    pushed = true;
+  }
+  return pushed;
+}
+
+function pushHorizontalAdjacentEnemiesOneStepAway(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  let pushed = false;
+  for (const dc of [-1, 1] as const) {
+    const sourceCol = center.col + dc;
+    if (!isInsideBoard(center.row, sourceCol)) continue;
+    const source = formatSquare(center.row, sourceCol);
+    const target = context.board.get(source);
+    if (!target || target.side === context.actorSide) continue;
+    const destCol = sourceCol + dc;
+    if (!isInsideBoard(center.row, destCol)) continue;
+    const dest = formatSquare(center.row, destCol);
+    if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, center.row, destCol)) continue;
+    context.board.delete(source);
+    context.board.set(dest, target);
+    moveAttachedSkillState(context.skillState, target.side, source, dest);
+    pushed = true;
+  }
+  return pushed;
+}
+
+function warpHorizontalAdjacentEnemiesToRandomEmptyCell(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  const empties = allEmptySquares(context.board, context.skillState);
+  let warped = false;
+  for (const dc of [-1, 1] as const) {
+    const sourceCol = center.col + dc;
+    if (!isInsideBoard(center.row, sourceCol)) continue;
+    const source = formatSquare(center.row, sourceCol);
+    const target = context.board.get(source);
+    if (!target || target.side === context.actorSide || empties.length === 0) continue;
+    const dest = pickRandom(empties);
+    if (!dest) continue;
+    context.board.delete(source);
+    context.board.set(dest, target);
+    moveAttachedSkillState(context.skillState, target.side, source, dest);
+    empties.splice(empties.indexOf(dest), 1);
+    warped = true;
+  }
+  return warped;
+}
+
+function moveAdjacentAllySandWithLeader(context: SkillContext) {
+  if (!context.fromSquare) return false;
+  const from = parseSquare(context.fromSquare);
+  const to = parseSquare(context.move.to);
+  const deltaRow = to.row - from.row;
+  const deltaCol = to.col - from.col;
+  if (deltaRow === 0 && deltaCol === 0) return false;
+  let moved = false;
+  forEachAdjacent(from, (row, col) => {
+    const source = formatSquare(row, col);
+    const ally = context.board.get(source);
+    if (!ally || ally.side !== context.actorSide || canonicalPieceCode(ally.code) !== 'SAND') return;
+    const destRow = row + deltaRow;
+    const destCol = col + deltaCol;
+    if (!isInsideBoard(destRow, destCol)) return;
+    const dest = formatSquare(destRow, destCol);
+    if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) return;
+    context.board.delete(source);
+    context.board.set(dest, ally);
+    moveAttachedSkillState(context.skillState, ally.side, source, dest);
+    moved = true;
+  });
+  return moved;
+}
+
+function moveAllyBehindBoatOneStep(context: SkillContext) {
+  if (!context.fromSquare) return false;
+  const from = parseSquare(context.fromSquare);
+  const to = parseSquare(context.move.to);
+  const deltaRow = to.row - from.row;
+  const deltaCol = to.col - from.col;
+  const behindRow = from.row - Math.sign(deltaRow);
+  const behindCol = from.col - Math.sign(deltaCol);
+  if (!isInsideBoard(behindRow, behindCol)) return false;
+  const source = formatSquare(behindRow, behindCol);
+  const ally = context.board.get(source);
+  if (!ally || ally.side !== context.actorSide || ally.code === 'OU') return false;
+  const destRow = behindRow + deltaRow;
+  const destCol = behindCol + deltaCol;
+  if (!isInsideBoard(destRow, destCol)) return false;
+  const dest = formatSquare(destRow, destCol);
+  if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) return false;
+  context.board.delete(source);
+  context.board.set(dest, ally);
+  moveAttachedSkillState(context.skillState, ally.side, source, dest);
+  return true;
+}
+
+function moveRandomAllyToCellBehindBird(context: SkillContext) {
+  if (!context.fromSquare) return false;
+  const from = parseSquare(context.fromSquare);
+  const to = parseSquare(context.move.to);
+  const deltaRow = to.row - from.row;
+  const deltaCol = to.col - from.col;
+  const behindRow = to.row - Math.sign(deltaRow);
+  const behindCol = to.col - Math.sign(deltaCol);
+  if (!isInsideBoard(behindRow, behindCol)) return false;
+  const dest = formatSquare(behindRow, behindCol);
+  if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, behindRow, behindCol)) return false;
+  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
+    return piece.side === context.actorSide && piece.code !== 'OU' && piece.code !== context.movedPiece.code;
+  });
+  const selected = pickRandom(candidates);
+  if (!selected) return false;
+  const [source, ally] = selected;
+  context.board.delete(source);
+  context.board.set(dest, ally);
+  moveAttachedSkillState(context.skillState, ally.side, source, dest);
+  return true;
+}
+
+function addRandomAdjacentHazard(
+  context: SkillContext,
+  hazardType: string,
+  affectsSide: PlayerSide,
+  durationTurns: number,
+) {
+  return addRandomAdjacentEmptyHazards(context, hazardType, affectsSide, durationTurns, 1);
+}
+
+function addRandomAdjacentEmptyHazards(
+  context: SkillContext,
+  hazardType: string,
+  affectsSide: PlayerSide,
+  durationTurns: number,
+  maxCells: number,
+) {
+  const cells = adjacentEmptySquares(context.board, parseSquare(context.move.to));
+  let placed = 0;
+  while (cells.length > 0 && placed < maxCells) {
+    const idx = Math.floor(Math.random() * cells.length);
+    const square = cells.splice(idx, 1)[0];
+    if (!square) continue;
+    const { row, col } = parseSquare(square);
+    context.skillState.board_hazards.push({
+      row,
+      col,
+      hazard_type: hazardType,
+      affects_side: affectsSide,
+      remaining_turns: durationTurns,
+    });
+    placed += 1;
+  }
+  return placed > 0;
+}
+
+function addRandomOpponentCampPoisonCells(context: SkillContext, count: number, durationTurns: number) {
+  const rows = context.actorSide === 'black' ? [0, 1, 2] : [6, 7, 8];
+  const cells: string[] = [];
+  for (const row of rows) {
+    for (let col = 0; col < BOARD_SIZE; col += 1) {
+      const square = formatSquare(row, col);
+      if (!context.board.has(square)) cells.push(square);
+    }
+  }
+  let placed = 0;
+  while (cells.length > 0 && placed < count) {
+    const square = cells.splice(Math.floor(Math.random() * cells.length), 1)[0];
+    if (!square) continue;
+    const { row, col } = parseSquare(square);
+    context.skillState.board_hazards.push({
+      row,
+      col,
+      hazard_type: 'poison_cell',
+      affects_side: opposite(context.actorSide),
+      remaining_turns: durationTurns,
+    });
+    placed += 1;
+  }
+  return placed > 0;
+}
+
+function addHorizontalHazards(context: SkillContext, hazardType: string, affectsSide: PlayerSide, durationTurns: number) {
+  const center = parseSquare(context.move.to);
+  let placed = false;
+  for (const dc of [-1, 1] as const) {
+    const col = center.col + dc;
+    if (!isInsideBoard(center.row, col)) continue;
+    const square = formatSquare(center.row, col);
+    if (context.board.has(square)) continue;
+    context.skillState.board_hazards.push({
+      row: center.row,
+      col,
+      hazard_type: hazardType,
+      affects_side: affectsSide,
+      remaining_turns: durationTurns,
+    });
+    placed = true;
+  }
+  return placed;
+}
+
+function addVerticalHazards(context: SkillContext, hazardType: string, affectsSide: PlayerSide, durationTurns: number) {
+  const center = parseSquare(context.move.to);
+  let placed = false;
+  for (const dr of [-1, 1] as const) {
+    const row = center.row + dr;
+    if (!isInsideBoard(row, center.col)) continue;
+    const square = formatSquare(row, center.col);
+    if (context.board.has(square)) continue;
+    context.skillState.board_hazards.push({
+      row,
+      col: center.col,
+      hazard_type: hazardType,
+      affects_side: affectsSide,
+      remaining_turns: durationTurns,
+    });
+    placed = true;
+  }
+  return placed;
+}
+
+function addChrysanthemumRevival(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  const allies: string[] = [];
+  forEachAdjacent(center, (row, col) => {
+    const square = formatSquare(row, col);
+    const piece = context.board.get(square);
+    if (piece?.side === context.actorSide && piece.code !== 'OU') allies.push(square);
+  });
+  allies.sort();
+  const targetSquare = allies[0];
+  const target = targetSquare ? context.board.get(targetSquare) : null;
+  if (!targetSquare || !target) return false;
+  const { row, col } = parseSquare(targetSquare);
+  context.skillState.piece_statuses.push({
+    side: target.side,
+    row,
+    col,
+    status_type: 'chrysanthemum_revival',
+    remaining_turns: 2,
+  });
+  return true;
+}
+
+function pushAdjacentPiecesOneStep(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  const planned = new Map<string, string>();
+  const plannedDestinations = new Set<string>();
+  forEachAdjacent(center, (row, col) => {
+    const source = formatSquare(row, col);
+    const piece = context.board.get(source);
+    if (!piece) return;
+    const dr = Math.sign(row - center.row);
+    const dc = Math.sign(col - center.col);
+    const destRow = row + dr;
+    const destCol = col + dc;
+    if (!isInsideBoard(destRow, destCol)) return;
+    const dest = formatSquare(destRow, destCol);
+    if (context.board.has(dest) || plannedDestinations.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) return;
+    planned.set(source, dest);
+    plannedDestinations.add(dest);
+  });
+  for (const [source, dest] of planned.entries()) {
+    const piece = context.board.get(source);
+    if (!piece) continue;
+    context.board.delete(source);
+    context.board.set(dest, piece);
+    moveAttachedSkillState(context.skillState, piece.side, source, dest);
+  }
+  return planned.size > 0;
+}
+
+function markKingSafeRoom(context: SkillContext, durationTurns: number) {
+  const kingSquare = findKingSquare(context.board, context.actorSide);
+  if (!kingSquare) return false;
+  const { row, col } = parseSquare(kingSquare);
+  context.skillState.board_hazards.push({
+    row,
+    col,
+    hazard_type: 'safe_room_cell',
+    affects_side: context.actorSide,
+    remaining_turns: durationTurns,
+  });
+  return true;
+}
+
+function imprisonRandomBoardEdge(context: SkillContext, durationTurns: number) {
+  const edge = pickRandom(HEN_EDGES);
+  if (!edge) return false;
+  context.skillState.board_hazards.push({
+    hazard_type: 'hen_edge_highlight',
+    edge,
+    remaining_turns: durationTurns,
+  });
+  let applied = false;
+  for (const [square, piece] of context.board.entries()) {
+    const { row, col } = parseSquare(square);
+    const onEdge =
+      (edge === 'top' && row === 0) ||
+      (edge === 'bottom' && row === 8) ||
+      (edge === 'left' && col === 0) ||
+      (edge === 'right' && col === 8);
+    if (!onEdge) continue;
+    context.skillState.piece_statuses.push({
+      row,
+      col,
+      side: piece.side,
+      status_type: 'stun',
+      remaining_turns: durationTurns,
+    });
+    applied = true;
+  }
+  return applied;
+}
+
+function moveKingSameVector(context: SkillContext) {
+  if (!context.fromSquare) return false;
+  const from = parseSquare(context.fromSquare);
+  const to = parseSquare(context.move.to);
+  const dr = Math.sign(to.row - from.row);
+  const dc = Math.sign(to.col - from.col);
+  if (dr === 0 && dc === 0) return false;
+  const kingSquare = findKingSquare(context.board, context.actorSide);
+  if (!kingSquare) return false;
+  const king = context.board.get(kingSquare);
+  if (!king) return false;
+  const kingPos = parseSquare(kingSquare);
+  const destRow = kingPos.row + dr;
+  const destCol = kingPos.col + dc;
+  if (!isInsideBoard(destRow, destCol)) return false;
+  const dest = formatSquare(destRow, destCol);
+  if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) return false;
+  context.board.delete(kingSquare);
+  context.board.set(dest, king);
+  moveAttachedSkillState(context.skillState, king.side, kingSquare, dest);
+  return true;
+}
+
+function applyScriptedPieceSkills(context: SkillContext) {
+  let applied = false;
+  const movedCode = normalizeSkillPieceCode(context.movedPiece.code);
+  if (!context.move.drop && context.fromSquare) {
+    if (movedCode === 'FLAME' || movedCode === 'ENN') {
+      applied = chance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
+    }
+    if (movedCode === 'FIRE' || movedCode === 'FIR') {
+      applied = chance(0.2) && decrementFirstHandPiece(context.hands, opposite(context.actorSide)) || applied;
+    }
+    if (movedCode === 'TREASURE') {
+      if (chance(0.2)) {
+        incrementHand(context.hands, context.actorSide, pickRandom(TREASURE_REWARD_CODES) ?? 'KI');
+        applied = true;
+      }
+    }
+    if (movedCode === 'WATER' || movedCode === 'SUI' || movedCode === 'IRON' || movedCode === 'WAVE' || movedCode === 'NAM') {
+      applied = pushAdjacentEnemyPiecesOneStep(context) || applied;
+    }
+    if (movedCode === 'SAND') {
+      applied = moveAdjacentAllySandWithLeader(context) || applied;
+    }
+    if (movedCode === 'BOAT') {
+      applied = moveAllyBehindBoatOneStep(context) || applied;
+    }
+    if (movedCode === 'BIRD') {
+      applied = moveRandomAllyToCellBehindBird(context) || applied;
+    }
+    if (movedCode === 'WIND') {
+      applied = pushOrthogonalAdjacentEnemiesToEdge(context) || applied;
+    }
+    if (movedCode === 'FISH') {
+      applied = chance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 3) || applied;
+    }
+    if (movedCode === 'MOSS') {
+      applied = chance(0.3) && summonRandomAdjacentEmptyPiece(context, 'MOSS') || applied;
+    }
+    if (movedCode === 'RAINBOW' || movedCode === 'BLUEONI') {
+      applied = applyAdjacentMovementModifier(context, 'orthogonal_step_only', 2) || applied;
+    }
+    if (movedCode === 'SWAMP') {
+      applied = applyAdjacentMovementModifier(context, 'vertical_step_only', 2) || applied;
+    }
+    if (movedCode === 'POISON') {
+      context.skillState.board_hazards.push({
+        row: parseSquare(context.fromSquare).row,
+        col: parseSquare(context.fromSquare).col,
+        hazard_type: 'poison_cell',
+        affects_side: opposite(context.actorSide),
+        remaining_turns: 4,
+      });
+      applied = true;
+    }
+    if (movedCode === 'WATERFALL') {
+      applied = chance(0.2) && sendAllAdjacentEnemiesToOwnerHands(context) || applied;
+    }
+    if (movedCode === 'A') {
+      applied = transformAdjacentEnemies(context, 'FU') || applied;
+    }
+    if (movedCode === 'EXPERIMENT') {
+      applied = transformAdjacentEnemiesToMutant(context) || applied;
+    }
+    if (movedCode === 'TIN') {
+      applied = chance(0.1) && applyRandomAdjacentEnemyStatus(context, 'stun', 2) || applied;
+    }
+    if (movedCode === 'ELECTRIC') {
+      applied = chance(0.2) && applyRandomAdjacentEnemyStatus(context, 'stun', 3) || applied;
+    }
+    if (movedCode === 'THUNDER') {
+      if (chance(0.1)) {
+        applied = decrementRandomHandPieces(context.hands, opposite(context.actorSide), 2) || applied;
+      }
+    }
+    if (movedCode === 'ICE') {
+      applied = chance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 2) || applied;
+    }
+    if (movedCode === 'SNOW') {
+      if (chance(0.2)) {
+        incrementHand(context.hands, context.actorSide, 'ICE');
+        applied = true;
+      }
+    }
+    if (movedCode === 'WOOD' || movedCode === 'MOK') {
+      applied = chance(0.1) && summonRandomAdjacentEmptyPiece(context, 'MOK') || applied;
+    }
+    if (movedCode === 'LEAF' || movedCode === 'HAA') {
+      applied = chance(0.1) && summonRandomAdjacentEmptyPiece(context, 'HAA') || applied;
+    }
+    if (movedCode === 'BULL') {
+      applied = chance(0.1) && summonOrthogonalAdjacentEmptyPieces(context, 'BULL') || applied;
+    }
+    if (movedCode === 'BIGNOISE') {
+      applied = warpHorizontalAdjacentEnemiesToRandomEmptyCell(context) || applied;
+    }
+    if (movedCode === 'REDONI') {
+      applied = pushHorizontalAdjacentEnemiesOneStepAway(context) || applied;
+      applied = addRandomAdjacentHazard(context, 'pit_cell', opposite(context.actorSide), 2) || applied;
+    }
+    if (movedCode === 'BLACKONI') {
+      applied = addRandomOpponentCampPoisonCells(context, 3, 2) || applied;
+    }
+    if (movedCode === 'DEMON' || movedCode === 'MAK') {
+      applied = chance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 2) || applied;
+    }
+    if (movedCode === 'TATSU') {
+      applied = chance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 1) || applied;
+    }
+    if (movedCode === 'DARK' || movedCode === 'YAM') {
+      applied = applyAdjacentEnemyStatus(context, 'dark_blind', 2) || applied;
+    }
+    if (movedCode === 'PRISON' || movedCode === 'FENCE') {
+      applied = applyRandomEnemyStatus(context, 'prison_fence_stun', 2) || applied;
+    }
+    if (movedCode === 'RIDGE') {
+      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'YAMA') || applied;
+    }
+    if (movedCode === 'KBOSS') {
+      applied = chance(0.4) && summonRandomAdjacentEmptyPiece(context, 'EXPERIMENT') || applied;
+    }
+    if (movedCode === 'ORE') {
+      applied = chance(0.2) && transformRandomAllyPawn(context, pickRandom(TREASURE_REWARD_CODES) ?? 'KI') || applied;
+    }
+    if (movedCode === 'GRAVE') {
+      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'SPIRIT') || applied;
+    }
+    if (movedCode === 'ROCK') {
+      applied = addHorizontalHazards(context, 'rock_obstacle', context.actorSide, 2) || applied;
+    }
+    if (movedCode === 'DEPRESSION') {
+      applied = addHorizontalHazards(context, 'pit_cell', opposite(context.actorSide), 2) || applied;
+    }
+    if (movedCode === 'ROSE') {
+      applied = addVerticalHazards(context, 'thorn_cell', opposite(context.actorSide), 2) || applied;
+    }
+    if (movedCode === 'CHRYSANTHEMUM') {
+      applied = addChrysanthemumRevival(context) || applied;
+    }
+    if (movedCode === 'GACHA_BAKU') {
+      applied = pushAdjacentPiecesOneStep(context) || applied;
+    }
+    if (movedCode === 'GACHA_SHITSU') {
+      applied = chance(0.3) && markKingSafeRoom(context, 2) || applied;
+    }
+    if (movedCode === 'GACHA_SADAME') {
+      context.skillState.piece_statuses.push({
+        row: parseSquare(context.move.to).row,
+        col: parseSquare(context.move.to).col,
+        side: context.actorSide,
+        status_type: 'opponent_turn_max_piece_cost',
+        max_piece_cost: 5,
+        remaining_turns: 1,
+      });
+      applied = true;
+    }
+    if (movedCode === 'GACHA_AN') {
+      applied = chance(0.1) && transformRandomEnemySpecialToPawn(context) || applied;
+    }
+    if (movedCode === 'GACHA_SO') {
+      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'KI') || applied;
+    }
+    if (movedCode === 'GACHA_TOU') {
+      applied = chance(0.2) && transformRandomAllyPawn(context, 'FIR') || applied;
+    }
+    if (movedCode === 'GACHA_HEN') {
+      applied = imprisonRandomBoardEdge(context, 2) || applied;
+    }
+    if (movedCode === 'GACHA_ITSU') {
+      applied = chance(0.3) && sendRandomEnemyToOwnerHand(context) || applied;
+    }
+    if (movedCode === 'GACHA_TOU2') {
+      applied = moveKingSameVector(context) || applied;
+    }
+    if (movedCode === 'GACHA_SOU') {
+      applied = addRandomAdjacentEmptyHazards(context, 'pit_cell', opposite(context.actorSide), 1, 3) || applied;
+    }
+    applied = moveAdjacentAllyKoGlueFollowLeader(context) || applied;
+  }
+  return applied;
+}
+
+function pushAdjacentEnemyPiecesOneStep(context: SkillContext) {
+  const center = parseSquare(context.move.to);
+  const enemy = opposite(context.actorSide);
+  const occupied = new Set(context.board.keys());
+  const planned = new Map<string, string>();
+  const plannedDestinations = new Set<string>();
+
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = center.row + dr;
+      const col = center.col + dc;
+      if (!isInsideBoard(row, col)) continue;
+      const from = formatSquare(row, col);
+      const target = context.board.get(from);
+      if (!target || target.side !== enemy) continue;
+      const toRow = row + Math.sign(dr);
+      const toCol = col + Math.sign(dc);
+      if (!isInsideBoard(toRow, toCol)) continue;
+      const to = formatSquare(toRow, toCol);
+      if (occupied.has(to) || plannedDestinations.has(to)) continue;
+      planned.set(from, to);
+      plannedDestinations.add(to);
+    }
+  }
+
+  for (const [from, to] of planned.entries()) {
+    const piece = context.board.get(from);
+    if (!piece) continue;
+    context.board.delete(from);
+    context.board.set(to, piece);
+    moveAttachedSkillState(context.skillState, piece.side, from, to);
+  }
+
+  return planned.size > 0;
+}
+
+function applyAdjacentMovementModifier(context: SkillContext, movementRule: string, durationTurns: number) {
+  const center = parseSquare(context.move.to);
+  const enemy = opposite(context.actorSide);
+  let count = 0;
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = center.row + dr;
+      const col = center.col + dc;
+      if (!isInsideBoard(row, col)) continue;
+      const target = context.board.get(formatSquare(row, col));
+      if (!target || target.side !== enemy) continue;
+      context.skillState.movement_modifiers.push({
+        row,
+        col,
+        side: target.side,
+        movement_rule: movementRule,
+        remaining_turns: durationTurns,
+      });
+      count += 1;
+    }
+  }
+  return count > 0;
+}
+
+function moveAdjacentAllyKoGlueFollowLeader(context: SkillContext) {
+  if (!context.fromSquare) return false;
+  const from = parseSquare(context.fromSquare);
+  const to = parseSquare(context.move.to);
+  const deltaRow = to.row - from.row;
+  const deltaCol = to.col - from.col;
+  if (deltaRow !== 0 || Math.abs(deltaCol) !== 1) return false;
+  const planned = new Map<string, string>();
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = from.row + dr;
+      const col = from.col + dc;
+      if (!isInsideBoard(row, col)) continue;
+      const source = formatSquare(row, col);
+      const piece = context.board.get(source);
+      if (!piece || piece.side !== context.actorSide || !isKoGluePiece(piece.code)) continue;
+      const destRow = row + deltaRow;
+      const destCol = col + deltaCol;
+      if (!isInsideBoard(destRow, destCol)) continue;
+      const dest = formatSquare(destRow, destCol);
+      if (context.board.has(dest) || planned.has(dest)) continue;
+      planned.set(source, dest);
+    }
+  }
+  for (const [source, dest] of planned.entries()) {
+    const piece = context.board.get(source);
+    if (!piece) continue;
+    context.board.delete(source);
+    context.board.set(dest, piece);
+    moveAttachedSkillState(context.skillState, piece.side, source, dest);
+  }
+  return planned.size > 0;
+}
+
 function isKingInCheck(board: InternalBoard, rules: RuleSnapshot, side: PlayerSide) {
   const kingSquare = findKingSquare(board, side);
   if (!kingSquare) return true;
@@ -598,7 +1459,15 @@ function isSquareAttacked(
     if (piece.side !== attacker) continue;
     const definition = resolvePieceDefinition(rules, piece);
     if (!definition) continue;
-    const targets = getMovementTargets(board, attacker, parseSquare(square), definition, piece.promoted);
+    const targets = getMovementTargets(
+      board,
+      createEmptySkillState(),
+      rules,
+      attacker,
+      parseSquare(square),
+      definition,
+      piece.promoted,
+    );
     if (targets.some((target) => formatSquare(target.row, target.col) === targetSquare)) return true;
   }
   return false;
@@ -610,7 +1479,360 @@ function isIllegalPawnDropMate(state: InternalGameState, rules: RuleSnapshot, de
 }
 
 function resolvePieceDefinition(rules: RuleSnapshot, piece: InternalPiece) {
-  return rules.piecesByCode[piece.code] ?? null;
+  return rules.piecesByCode[piece.code] ?? rules.piecesByCode[canonicalPieceCode(piece.code)] ?? null;
+}
+
+function createEmptySkillState(): SkillState {
+  return {
+    board_hazards: [],
+    board_arrow_tiles: [],
+    movement_modifiers: [],
+    piece_statuses: [],
+    piece_defenses: [],
+  };
+}
+
+function parseSkillState(raw: GameSnapshot['skillState']): SkillState {
+  return {
+    board_hazards: arrayOfRecords(raw?.board_hazards),
+    board_arrow_tiles: arrayOfRecords(raw?.board_arrow_tiles),
+    movement_modifiers: arrayOfRecords(raw?.movement_modifiers),
+    piece_statuses: arrayOfRecords(raw?.piece_statuses),
+    piece_defenses: arrayOfRecords(raw?.piece_defenses),
+  };
+}
+
+function cloneSkillState(skillState: SkillState): SkillState {
+  return {
+    board_hazards: skillState.board_hazards.map((entry) => ({ ...entry })),
+    board_arrow_tiles: skillState.board_arrow_tiles.map((entry) => ({ ...entry })),
+    movement_modifiers: skillState.movement_modifiers.map((entry) => ({ ...entry })),
+    piece_statuses: skillState.piece_statuses.map((entry) => ({ ...entry })),
+    piece_defenses: skillState.piece_defenses.map((entry) => ({ ...entry })),
+  };
+}
+
+function arrayOfRecords(raw: unknown): Record<string, unknown>[] {
+  return Array.isArray(raw)
+    ? raw.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => ({ ...entry }))
+    : [];
+}
+
+function isPieceImmobilized(skillState: SkillState, piece: InternalPiece, square: string) {
+  if (piece.code === 'OU') return false;
+  const position = parseSquare(square);
+  return skillState.piece_statuses.some((entry) => {
+    const statusType = asString(entry.status_type ?? entry.statusType);
+    if (
+      statusType !== 'stun' &&
+      statusType !== 'abyss_stun' &&
+      statusType !== 'time_stop' &&
+      statusType !== 'dark_blind' &&
+      statusType !== 'prison_fence_stun' &&
+      statusType !== 'peak_lock'
+    ) {
+      return false;
+    }
+    return (
+      active(entry) &&
+      asSide(entry.side) === piece.side &&
+      asNumber(entry.row) === position.row &&
+      asNumber(entry.col) === position.col
+    );
+  });
+}
+
+function isCaptureBlocked(skillState: SkillState, piece: InternalPiece, square: string) {
+  const position = parseSquare(square);
+  return (
+    skillState.piece_defenses.some(
+      (entry) =>
+        active(entry) &&
+        asString(entry.mode) === 'immunity' &&
+        asSide(entry.side) === piece.side &&
+        asNumber(entry.row) === position.row &&
+        asNumber(entry.col) === position.col,
+    ) ||
+    skillState.piece_statuses.some(
+      (entry) =>
+        active(entry) &&
+        asString(entry.status_type ?? entry.statusType) === 'dark_blind' &&
+        asSide(entry.side) === piece.side &&
+        asNumber(entry.row) === position.row &&
+        asNumber(entry.col) === position.col,
+    )
+  );
+}
+
+function isCellBlockedByHazard(skillState: SkillState, row: number, col: number) {
+  return skillState.board_hazards.some((entry) => {
+    const type = asString(entry.hazard_type ?? entry.hazardType);
+    return (
+      active(entry) &&
+      (type === 'rock_obstacle' || type === 'pit_cell') &&
+      asNumber(entry.row) === row &&
+      asNumber(entry.col) === col
+    );
+  });
+}
+
+function isDropBlockedBySkillState(skillState: SkillState, side: PlayerSide, row: number, col: number) {
+  return skillState.board_hazards.some((entry) => {
+    const type = asString(entry.hazard_type ?? entry.hazardType);
+    return (
+      active(entry) &&
+      (type === 'rock_obstacle' ||
+        type === 'pit_cell' ||
+        (type === 'thorn_cell' && asSide(entry.affects_side ?? entry.affectsSide) === side)) &&
+      asNumber(entry.row) === row &&
+      asNumber(entry.col) === col
+    );
+  });
+}
+
+function applyPassiveSkillAuras(skillState: SkillState, board: InternalBoard) {
+  skillState.piece_statuses = skillState.piece_statuses.filter((entry) => {
+    const statusType = asString(entry.status_type ?? entry.statusType);
+    return statusType !== 'peak_lock';
+  });
+  const peakSides = new Set<PlayerSide>();
+  for (const piece of board.values()) {
+    if (canonicalPieceCode(piece.code) === 'PEAK') peakSides.add(piece.side);
+  }
+  if (peakSides.size === 0) return;
+  for (const [square, piece] of board.entries()) {
+    if (!peakSides.has(opposite(piece.side))) continue;
+    if (piece.code === 'OU' || STANDARD_CODES.has(canonicalPieceCode(piece.code))) continue;
+    const { row, col } = parseSquare(square);
+    skillState.piece_statuses.push({
+      row,
+      col,
+      side: piece.side,
+      status_type: 'peak_lock',
+      remaining_turns: 1,
+    });
+  }
+}
+
+function applyMutantReverts(board: InternalBoard) {
+  for (const [square, piece] of board.entries()) {
+    if (piece.code !== 'MUTANT' || !piece.mutantRevertCode) continue;
+    const pos = parseSquare(square);
+    const adjacentEnemyExperiment = Array.from(board.entries()).some(([otherSquare, other]) => {
+      if (other.side === piece.side || canonicalPieceCode(other.code) !== 'EXPERIMENT') return false;
+      const otherPos = parseSquare(otherSquare);
+      return Math.abs(otherPos.row - pos.row) <= 1 && Math.abs(otherPos.col - pos.col) <= 1;
+    });
+    if (!adjacentEnemyExperiment) {
+      board.set(square, { side: piece.side, code: piece.mutantRevertCode, promoted: false });
+    }
+  }
+}
+
+function adjacentEnemySquares(context: SkillContext, center: Square, excludeKing: boolean) {
+  const out: string[] = [];
+  forEachAdjacent(center, (row, col) => {
+    const square = formatSquare(row, col);
+    const piece = context.board.get(square);
+    if (!piece || piece.side === context.actorSide) return;
+    if (excludeKing && piece.code === 'OU') return;
+    out.push(square);
+  });
+  return out;
+}
+
+function adjacentEmptySquares(board: InternalBoard, center: Square) {
+  const out: string[] = [];
+  forEachAdjacent(center, (row, col) => {
+    const square = formatSquare(row, col);
+    if (!board.has(square)) out.push(square);
+  });
+  return out;
+}
+
+function allEmptySquares(board: InternalBoard, skillState: SkillState) {
+  const out: string[] = [];
+  for (let row = 0; row < BOARD_SIZE; row += 1) {
+    for (let col = 0; col < BOARD_SIZE; col += 1) {
+      const square = formatSquare(row, col);
+      if (!board.has(square) && !isCellBlockedByHazard(skillState, row, col)) out.push(square);
+    }
+  }
+  return out;
+}
+
+function forEachAdjacent(center: Square, fn: (row: number, col: number) => void) {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = center.row + dr;
+      const col = center.col + dc;
+      if (!isInsideBoard(row, col)) continue;
+      fn(row, col);
+    }
+  }
+}
+
+function pickRandom<T>(items: readonly T[]): T | null {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function chance(probability: number) {
+  return Math.random() <= probability;
+}
+
+function decrementFirstHandPiece(hands: InternalHands, side: PlayerSide) {
+  const key = Object.keys(hands[side])
+    .sort()
+    .find((pieceCode) => (hands[side][pieceCode] ?? 0) > 0);
+  if (!key) return false;
+  decrementHand(hands, side, key);
+  return true;
+}
+
+function decrementRandomHandPieces(hands: InternalHands, side: PlayerSide, maxCount: number) {
+  let removed = 0;
+  for (let i = 0; i < maxCount; i += 1) {
+    const keys = Object.keys(hands[side]).filter((pieceCode) => (hands[side][pieceCode] ?? 0) > 0);
+    const key = pickRandom(keys);
+    if (!key) break;
+    decrementHand(hands, side, key);
+    removed += 1;
+  }
+  return removed > 0;
+}
+
+function filterByMovementModifier(
+  targets: Square[],
+  skillState: SkillState,
+  side: PlayerSide,
+  source: Square,
+  pieceCode: string,
+) {
+  if (pieceCode === 'OU') return targets;
+  const modifier = skillState.movement_modifiers.find(
+    (entry) =>
+      active(entry) &&
+      asSide(entry.side) === side &&
+      asNumber(entry.row) === source.row &&
+      asNumber(entry.col) === source.col,
+  );
+  const rule = asString(modifier?.movement_rule ?? modifier?.movementRule);
+  if (!rule) return targets;
+  return targets.filter((target) => {
+    const dr = target.row - source.row;
+    const dc = target.col - source.col;
+    if (rule === 'orthogonal_step_only') return Math.abs(dr) + Math.abs(dc) === 1;
+    if (rule === 'vertical_step_only') return dc === 0 && Math.abs(dr) === 1;
+    if (rule === 'diagonal_forward_step_only') {
+      return dr === orientRowDelta(side, -1) && Math.abs(dc) === 1;
+    }
+    return true;
+  });
+}
+
+function applyPoisonHazardsOnLanding(
+  skillState: SkillState,
+  board: InternalBoard,
+  actorSide: PlayerSide,
+  square: string,
+) {
+  const landed = board.get(square);
+  if (!landed || landed.side !== actorSide || landed.code === 'OU') return false;
+  const position = parseSquare(square);
+  const lethal = skillState.board_hazards.some((entry) => {
+    const type = asString(entry.hazard_type ?? entry.hazardType);
+    return (
+      active(entry) &&
+      type === 'poison_cell' &&
+      asSide(entry.affects_side ?? entry.affectsSide) === actorSide &&
+      asNumber(entry.row) === position.row &&
+      asNumber(entry.col) === position.col
+    );
+  });
+  if (!lethal) return false;
+  board.delete(square);
+  return true;
+}
+
+function moveAttachedSkillState(skillState: SkillState, side: PlayerSide, fromSquare: string, toSquare: string) {
+  const from = parseSquare(fromSquare);
+  const to = parseSquare(toSquare);
+  for (const list of [skillState.movement_modifiers, skillState.piece_statuses, skillState.piece_defenses]) {
+    for (const entry of list) {
+      if (asSide(entry.side) !== side) continue;
+      if (asNumber(entry.row) !== from.row || asNumber(entry.col) !== from.col) continue;
+      entry.row = to.row;
+      entry.col = to.col;
+    }
+  }
+}
+
+function tickSkillStateDurations(skillState: SkillState) {
+  skillState.board_hazards = tickSkillList(skillState.board_hazards);
+  skillState.board_arrow_tiles = tickSkillList(skillState.board_arrow_tiles);
+  skillState.movement_modifiers = tickSkillList(skillState.movement_modifiers);
+  skillState.piece_statuses = tickSkillList(skillState.piece_statuses);
+  skillState.piece_defenses = tickSkillList(skillState.piece_defenses);
+}
+
+function tickSkillList(list: Record<string, unknown>[]) {
+  const out: Record<string, unknown>[] = [];
+  for (const entry of list) {
+    if (entry.permanent === true || entry.stage_fixed === true) {
+      out.push(entry);
+      continue;
+    }
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (remaining >= 999) {
+      out.push(entry);
+      continue;
+    }
+    if (remaining <= 0) continue;
+    const next = remaining - 1;
+    if (next > 0) out.push({ ...entry, remaining_turns: next });
+  }
+  return out;
+}
+
+function normalizeSkillPieceCode(raw: string) {
+  const upper = raw.trim().toUpperCase();
+  if (upper === 'GACHA_KOU' || upper === 'GACHA_KO') return 'GACHA_KOU';
+  if (upper === 'WATER') return 'SUI';
+  return upper;
+}
+
+function canonicalPieceCode(raw: string) {
+  const normalized = normalizeSkillPieceCode(raw);
+  if (normalized === 'WATER') return 'SUI';
+  if (normalized === 'GACHA_KO') return 'GACHA_KOU';
+  return normalized;
+}
+
+function isKoGluePiece(pieceCode: string) {
+  const normalized = normalizeSkillPieceCode(pieceCode);
+  return normalized === 'GACHA_KOU' || normalized === 'KO';
+}
+
+function active(entry: Record<string, unknown>) {
+  return (asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0) > 0;
+}
+
+function asSide(raw: unknown): PlayerSide {
+  return raw === 'white' ? 'white' : 'black';
+}
+
+function asNumber(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
+
+function asString(raw: unknown): string | null {
+  return typeof raw === 'string' ? raw : null;
+}
+
+function isRecord(raw: unknown): raw is Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
 }
 
 function findKingSquare(board: InternalBoard, side: PlayerSide) {

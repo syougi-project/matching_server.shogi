@@ -1,13 +1,28 @@
-import type { AppShogiPieceCatalogItem } from '@/integrations/app-shogi-validator';
 import type { PieceDefinition } from '@/types/domain';
 
 export type PvpCatalogNormalizer = (
-  items: AppShogiPieceCatalogItem[],
-) => AppShogiPieceCatalogItem[] | Promise<AppShogiPieceCatalogItem[]>;
+  items: PvpCatalogItem[],
+) => PvpCatalogItem[] | Promise<PvpCatalogItem[]>;
+
+export type PvpCatalogItem = {
+  pieceCode: string;
+  char: string;
+  name: string;
+  unlock: string;
+  desc: string;
+  skill: string;
+  move: string;
+  moveVectors: PieceDefinition['moveVectors'];
+  isRepeatable: boolean;
+  canJump?: boolean;
+  moveConstraints?: Record<string, unknown> | null;
+  moveRules?: PieceDefinition['moveRules'];
+  skillDefinitionsV2?: PieceDefinition['skillDefinitionsV2'];
+};
 
 export function pieceDefinitionsToCatalogItems(
   pieces: PieceDefinition[],
-): AppShogiPieceCatalogItem[] {
+): PvpCatalogItem[] {
   return pieces.map((piece) => ({
     pieceCode: piece.pieceCode,
     char: piece.char,
@@ -26,7 +41,7 @@ export function pieceDefinitionsToCatalogItems(
 }
 
 export function catalogItemsToPieceDefinitions(
-  items: AppShogiPieceCatalogItem[],
+  items: PvpCatalogItem[],
   originals: PieceDefinition[],
 ): PieceDefinition[] {
   const byCode = new Map(originals.map((piece) => [piece.pieceCode.toUpperCase(), piece]));

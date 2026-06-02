@@ -149,6 +149,30 @@ const DEFAULT_PIECES: PieceDefinition[] = [
       },
     },
   ),
+  createPiece('SUI', '水', 'Water', kingLikeVectors(), {
+    sfenCode: 'WATER',
+    canonicalCode: 'SUI',
+    promotable: false,
+    skill: 'push_adjacent_enemy_one_step',
+  }),
+  createPiece('IRON', '鉄', 'Iron', kingLikeVectors(), {
+    promotable: false,
+    skill: 'push_adjacent_enemy_one_step',
+  }),
+  createPiece('RAINBOW', '虹', 'Rainbow', kingLikeVectors(), {
+    promotable: false,
+    skill: 'adjacent_enemy_orthogonal_step_only',
+  }),
+  createPiece('POISON', '毒', 'Poison', kingLikeVectors(), {
+    promotable: false,
+    skill: 'poison_trail',
+  }),
+  createPiece('GACHA_KOU', '膠', 'Glue', kingLikeVectors(), {
+    sfenCode: 'GACHA_KO',
+    canonicalCode: 'GACHA_KOU',
+    promotable: false,
+    skill: 'follow_adjacent_ally_move',
+  }),
 ];
 
 export class InMemoryPieceCatalogProvider implements PieceCatalogProvider {
@@ -188,7 +212,7 @@ function createPiece(
 ): PieceDefinition {
   return {
     pieceCode,
-    canonicalCode: pieceCode,
+    canonicalCode: overrides?.canonicalCode ?? pieceCode,
     char,
     name,
     skill: overrides?.skill ?? '',
@@ -201,4 +225,17 @@ function createPiece(
     skillDefinitionsV2: overrides?.skillDefinitionsV2 ?? null,
     sfenCode: overrides?.sfenCode ?? null,
   };
+}
+
+function kingLikeVectors(): PieceDefinition['moveVectors'] {
+  return [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 0, maxStep: 1 },
+    { dx: 1, dy: 0, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 0, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
 }

@@ -1,4 +1,4 @@
-/** app.shogi 正典局面（先手=black→player, 後手=white→enemy） */
+/** Canonical game state snapshot used by clients for display/resync. */
 export type MatchingCanonicalState = {
   sideToMove: 'player' | 'enemy';
   turnNumber: number;
