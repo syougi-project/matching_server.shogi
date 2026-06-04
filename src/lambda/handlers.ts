@@ -38,7 +38,7 @@ export function createWebSocketLambdaHandlers(deps: LambdaHandlerDeps) {
   const core = new MatchingCore(deps.context, deps.matchmakingRequests ?? null);
 
   return {
-    connect: (event: ApiGatewayWebSocketEvent) => connect(event, deps),
+    connect: (event: ApiGatewayWebSocketEvent) => connect(event, deps, core),
     disconnect: (event: ApiGatewayWebSocketEvent) => disconnect(event, deps, core),
     message: (event: ApiGatewayWebSocketEvent) => message(event, deps, core),
   };
@@ -71,6 +71,7 @@ export async function outboxWorkerHandler(): Promise<LambdaResponse> {
 async function connect(
   event: ApiGatewayWebSocketEvent,
   deps: LambdaHandlerDeps,
+  core: MatchingCore,
 ): Promise<LambdaResponse> {
   const ticket = event.queryStringParameters?.ticket?.trim();
   if (!ticket) return { statusCode: 401, body: 'Missing ticket' };
@@ -78,15 +79,33 @@ async function connect(
   try {
     const claims = verifyMatchmakingTicket(ticket, deps.ticketSecret);
     const now = nowIso();
+    const matchId = event.queryStringParameters?.matchId?.trim() || null;
     await deps.connections.save({
       connectionId: event.requestContext.connectionId,
       userId: claims.userId,
       connectedAt: now,
       lastSeenAt: now,
       status: 'connected',
-      currentMatchId: event.queryStringParameters?.matchId?.trim() || null,
+      currentMatchId: matchId,
       sessionToken: null,
     });
+
+    if (matchId) {
+      try {
+        const result = await core.reconnect(
+          matchId,
+          claims.userId,
+          event.requestContext.connectionId,
+        );
+        await post(deps, event.requestContext.connectionId, result.response);
+        if (result.opponentMessage) {
+          await postToOpponent(deps, result.match, claims.userId, result.opponentMessage);
+        }
+      } catch {
+        // 対局画面の再接続: 失敗しても $connect は成功させ、クライアントのセッション復元に任せる
+      }
+    }
+
     return { statusCode: 200 };
   } catch (error) {
     return toLambdaError(error);
