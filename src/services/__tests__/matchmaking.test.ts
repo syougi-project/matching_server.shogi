@@ -116,8 +116,8 @@ describe('MatchmakingService', () => {
     const match = await context.services.matchmaking.runOnce();
 
     expect(match).not.toBeNull();
-    expect(match?.playerBlackRating).toBe(0);
-    expect(match?.playerWhiteRating).toBe(1500);
+    expect(match?.playerBlackProfile.rating).toBe(0);
+    expect(match?.playerWhiteProfile.rating).toBe(1500);
   });
 
   test('resolves user role from match', async () => {
