@@ -128,7 +128,10 @@ export class MatchmakingService {
   }
 
   private async findOpponent(seed: QueueEntry, allBuckets: number[]) {
-    const orderedBuckets = expandBuckets(seed.ratingBucket, this.config.ratingBucketSize, allBuckets);
+    const orderedBuckets = this.config.experimentalWideRatingMatch
+      ? allBuckets
+      : expandBuckets(seed.ratingBucket, this.config.ratingBucketSize, allBuckets);
+
     for (const bucket of orderedBuckets) {
       const entries = await this.queueRepository.listWaitingByBucket(
         bucket,

@@ -1,5 +1,7 @@
 export type MatchingServerConfig = {
   ratingBucketSize: number;
+  /** 実験用: true ならレート帯に関係なく待機中の相手とマッチ */
+  experimentalWideRatingMatch: boolean;
   reconnectGraceSeconds: number;
   queueTtlSeconds: number;
   matchmakingBatchSize: number;
@@ -13,6 +15,8 @@ export type MatchingServerConfig = {
 export function loadConfig(env = process.env): MatchingServerConfig {
   return {
     ratingBucketSize: parsePositiveInt(env.MATCHING_RATING_BUCKET_SIZE, 100),
+    // 一旦実験用デフォルト ON。本番前は MATCHING_EXPERIMENT_WIDE_RATING=false を推奨
+    experimentalWideRatingMatch: parseBooleanFlag(env.MATCHING_EXPERIMENT_WIDE_RATING, true),
     reconnectGraceSeconds: parsePositiveInt(env.MATCHING_RECONNECT_GRACE_SECONDS, 30),
     queueTtlSeconds: parsePositiveInt(env.MATCHING_QUEUE_TTL_SECONDS, 120),
     matchmakingBatchSize: parsePositiveInt(env.MATCHING_BATCH_SIZE, 20),
@@ -28,6 +32,14 @@ function parsePositiveInt(raw: string | undefined, fallback: number) {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean) {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  return fallback;
 }
 
 function normalizeUrl(raw: string | undefined) {

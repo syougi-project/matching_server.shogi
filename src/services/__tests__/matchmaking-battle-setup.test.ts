@@ -13,12 +13,14 @@ import type { BattleSetupSnapshot } from '@/types/domain';
 
 const config = {
   ratingBucketSize: 100,
+  experimentalWideRatingMatch: true,
   reconnectGraceSeconds: 30,
   queueTtlSeconds: 120,
   matchmakingBatchSize: 20,
   matchmakingBucketScanLimit: 50,
   matchmakingBucketCandidateLimit: 25,
   bffBaseUrl: null,
+  appShogiRoot: null,
 } as const;
 
 describe('MatchmakingService battle setup integration', () => {

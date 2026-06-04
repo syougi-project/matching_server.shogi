@@ -98,6 +98,28 @@ describe('MatchmakingService', () => {
     expect(entry?.status).toBe('waiting');
   });
 
+  test('matches players across distant rating buckets when experimental wide rating is enabled', async () => {
+    const context = createServerContext();
+    expect(context.config.experimentalWideRatingMatch).toBe(true);
+
+    await context.services.queue.enterQueue({
+      userId: 'user-low',
+      connectionId: 'conn-low',
+      rating: 0,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-high',
+      connectionId: 'conn-high',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+
+    expect(match).not.toBeNull();
+    expect(match?.playerBlackRating).toBe(0);
+    expect(match?.playerWhiteRating).toBe(1500);
+  });
+
   test('resolves user role from match', async () => {
     const context = createServerContext();
 

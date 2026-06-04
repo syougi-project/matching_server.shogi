@@ -24,6 +24,7 @@ bun run dev:ws
 | `MATCHING_BFF_INTERNAL_TOKEN` | BFF 内部 API 呼び出し用共有トークン |
 | `MATCHING_TICKET_SECRET` | BFF 発行 matchmaking ticket 検証用署名鍵 |
 | `MATCHING_RATING_BUCKET_SIZE` | レート帯幅 |
+| `MATCHING_EXPERIMENT_WIDE_RATING` | 実験用: `true`（既定）でレート帯を無視してマッチ（例: 0 と 1500）。本番前は `false` 推奨 |
 | `MATCHING_RECONNECT_GRACE_SECONDS` | 切断猶予秒 |
 
 ## 起動
