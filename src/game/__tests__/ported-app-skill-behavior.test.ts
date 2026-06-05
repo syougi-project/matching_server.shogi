@@ -63,6 +63,27 @@ describe('ported app.shogi skill behavior', () => {
     expect(result.nextGame.boardState['4d']).toBe('black:GACHA_KOU');
   });
 
+  test('maps BFF gacha muro code to shitsu safe-room skill', () => {
+    Math.random = () => 0;
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules: createRules(),
+      game: {
+        ...createSkillGame('GACHA_MURO'),
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:GACHA_MURO',
+        },
+      },
+      move: { from: '5e', to: '5f', piece: 'GACHA_MURO' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.skillState.board_hazards.length).toBeGreaterThan(0);
+  });
+
   test('stateful skills affect later legal move validation', () => {
     Math.random = () => 0;
     const rainbow = engine.applyMove({
@@ -133,6 +154,7 @@ function createRules(): RuleSnapshot {
     'MUTANT',
     'YAMA',
     'SPIRIT',
+    'GACHA_MURO',
     ...PORTED_APP_SKILL_CODES,
   ]) {
     piecesByCode[code] = createPiece(code);

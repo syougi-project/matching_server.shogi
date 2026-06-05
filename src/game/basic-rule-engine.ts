@@ -1798,7 +1798,11 @@ function tickSkillList(list: Record<string, unknown>[]) {
 
 function normalizeSkillPieceCode(raw: string) {
   const upper = raw.trim().toUpperCase();
-  if (upper === 'GACHA_KOU' || upper === 'GACHA_KO') return 'GACHA_KOU';
+  if (upper === 'GACHA_KOU' || upper === 'GACHA_KO' || upper === 'PIECE_GACHA_KO') return 'GACHA_KOU';
+  if (upper === 'GACHA_MURO' || upper === 'PIECE_GACHA_MURO' || upper === 'PIECE_GACHA_SHITSU') {
+    return 'GACHA_SHITSU';
+  }
+  if (upper === 'PIECE_GACHA_TO') return 'GACHA_TOU2';
   if (upper === 'WATER') return 'SUI';
   return upper;
 }
