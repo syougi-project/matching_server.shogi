@@ -173,6 +173,33 @@ describe('GameCommandService', () => {
     ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
   });
 
+  test('does not treat missing from with drop false as a drop move', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    await expect(
+      context.services.gameCommand.makeMove({
+        matchId: match!.matchId,
+        userId: match!.playerBlackUserId,
+        expectedVersion: 1,
+        move: { to: '7f', piece: 'FU', drop: false, promote: false },
+      }),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
+  });
+
   test('rejects nifu pawn drop', async () => {
     const context = createServerContext();
 

@@ -229,12 +229,13 @@ function parseGameState(game: GameSnapshot): InternalGameState {
 }
 
 function normalizeMove(move: MovePayload): NormalizedMove {
+  const from = move.from?.trim().toLowerCase() ?? null;
   return {
-    from: move.from ?? null,
+    from,
     to: move.to.trim().toLowerCase(),
     piece: move.piece.trim().toUpperCase().replace(/\+$/, ''),
     promote: move.promote === true,
-    drop: move.drop === true || !move.from,
+    drop: move.drop === true,
   };
 }
 
