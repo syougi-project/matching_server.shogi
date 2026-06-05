@@ -122,7 +122,12 @@ export function startLocalDevServer(port = 3010) {
           if (trustedMessage.action === 'make_move' && response.type === 'game_state_updated') {
             const match = await context.repositories.matches.findById(response.matchId);
             if (match) {
-              await broadcastToMatch(runtime, match, buildGameStateUpdatedMessage(match));
+              await broadcastToOpponent(
+                runtime,
+                match,
+                trustedMessage.userId,
+                buildGameStateUpdatedMessage(match),
+              );
             }
             return;
           }
@@ -130,7 +135,7 @@ export function startLocalDevServer(port = 3010) {
           if (trustedMessage.action === 'resign' && response.type === 'game_finished') {
             const match = await context.repositories.matches.findById(response.matchId);
             if (match) {
-              await broadcastToMatch(runtime, match, response);
+              await broadcastToOpponent(runtime, match, trustedMessage.userId, response);
             }
           }
         },
@@ -230,6 +235,17 @@ async function broadcastToMatch(
 ) {
   runtime.socketByUserId.get(match.playerBlackUserId)?.send(JSON.stringify(message));
   runtime.socketByUserId.get(match.playerWhiteUserId)?.send(JSON.stringify(message));
+}
+
+async function broadcastToOpponent(
+  runtime: RuntimeState,
+  match: MatchSession,
+  actorUserId: string,
+  message: GameStateUpdatedMessage | GameFinishedMessage,
+) {
+  const opponentUserId =
+    match.playerBlackUserId === actorUserId ? match.playerWhiteUserId : match.playerBlackUserId;
+  runtime.socketByUserId.get(opponentUserId)?.send(JSON.stringify(message));
 }
 
 async function notifyOpponentReconnected(

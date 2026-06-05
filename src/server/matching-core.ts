@@ -32,10 +32,11 @@ export class MatchingCore {
       const match = await this.context.repositories.matches.findById(response.matchId);
       if (match) {
         const update = buildGameStateUpdatedMessage(match);
-        broadcasts.push(
-          { userId: match.playerBlackUserId, message: update },
-          { userId: match.playerWhiteUserId, message: update },
-        );
+        const opponentUserId =
+          message.userId === match.playerBlackUserId
+            ? match.playerWhiteUserId
+            : match.playerBlackUserId;
+        broadcasts.push({ userId: opponentUserId, message: update });
       }
       return { response, broadcasts, match };
     }
@@ -43,10 +44,11 @@ export class MatchingCore {
     if (message.action === 'resign' && response.type === 'game_finished') {
       const match = await this.context.repositories.matches.findById(response.matchId);
       if (match) {
-        broadcasts.push(
-          { userId: match.playerBlackUserId, message: response },
-          { userId: match.playerWhiteUserId, message: response },
-        );
+        const opponentUserId =
+          message.userId === match.playerBlackUserId
+            ? match.playerWhiteUserId
+            : match.playerBlackUserId;
+        broadcasts.push({ userId: opponentUserId, message: response });
       }
       return { response, broadcasts, match };
     }
