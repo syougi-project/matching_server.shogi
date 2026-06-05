@@ -56,25 +56,45 @@ function mirrorCell(row: number, col: number) {
   };
 }
 
-/** 旧デッキ保存の漢字 pieceCode などを ruleSnapshot のキーへ寄せる */
+/** 旧アプリが保存した battle-setup コード → BFF マスタへ寄せる */
+const PLACEMENT_PIECE_CODE_ALIASES: Readonly<Record<string, string>> = {
+  PIECE_GACHA_SHITSU: 'PIECE_GACHA_MURO',
+  PIECE_GACHA_KOU: 'PIECE_GACHA_KO',
+  PIECE_GACHA_TOU2: 'PIECE_GACHA_TO',
+};
+
+function placementCodeCandidates(rawCode: string): string[] {
+  const upper = rawCode.trim().toUpperCase();
+  if (!upper) return [];
+  const alias = PLACEMENT_PIECE_CODE_ALIASES[upper];
+  const candidates = [upper];
+  if (alias) candidates.push(alias);
+  if (alias === 'PIECE_GACHA_KO') candidates.push('GACHA_KOU');
+  if (alias === 'PIECE_GACHA_MURO') candidates.push('GACHA_SHITSU');
+  if (alias === 'PIECE_GACHA_TO') candidates.push('GACHA_TOU2');
+  return [...new Set(candidates)];
+}
+
 function resolvePlacementPieceCode(
   rawCode: string,
   rules: RuleSnapshot,
 ): string | null {
-  const upper = rawCode.trim().toUpperCase();
-  if (!upper) return null;
-  const direct = rules.piecesByCode[upper];
-  if (direct) return direct.pieceCode.toUpperCase();
+  for (const upper of placementCodeCandidates(rawCode)) {
+    const direct = rules.piecesByCode[upper];
+    if (direct) return direct.pieceCode.toUpperCase();
+  }
 
-  for (const piece of Object.values(rules.piecesByCode)) {
-    if (piece.sfenCode?.trim().toUpperCase() === upper) {
-      return piece.pieceCode.toUpperCase();
-    }
-    if (piece.canonicalCode?.trim().toUpperCase() === upper) {
-      return piece.pieceCode.toUpperCase();
-    }
-    if (piece.char.trim().toUpperCase() === upper) {
-      return piece.pieceCode.toUpperCase();
+  for (const upper of placementCodeCandidates(rawCode)) {
+    for (const piece of Object.values(rules.piecesByCode)) {
+      if (piece.sfenCode?.trim().toUpperCase() === upper) {
+        return piece.pieceCode.toUpperCase();
+      }
+      if (piece.canonicalCode?.trim().toUpperCase() === upper) {
+        return piece.pieceCode.toUpperCase();
+      }
+      if (piece.char.trim().toUpperCase() === upper) {
+        return piece.pieceCode.toUpperCase();
+      }
     }
   }
 
