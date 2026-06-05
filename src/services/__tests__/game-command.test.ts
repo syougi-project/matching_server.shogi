@@ -200,6 +200,50 @@ describe('GameCommandService', () => {
     ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
   });
 
+  test('accepts legacy client gacha setup piece codes in move payload', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    const customGame: GameSnapshot = {
+      ...match!.game,
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:PIECE_GACHA_KO',
+      },
+      handsState: { black: {}, white: {} },
+      turn: 'black',
+      version: 1,
+    };
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: customGame,
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 1,
+      move: { from: '5e', to: '5f', piece: 'GACHA_KOU', promote: false, drop: false },
+    });
+
+    expect(updated.game.boardState['5f']).toBe('black:PIECE_GACHA_KO');
+  });
+
   test('rejects nifu pawn drop', async () => {
     const context = createServerContext();
 

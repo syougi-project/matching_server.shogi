@@ -1936,7 +1936,14 @@ function pieceCodesEquivalent(left: string, right: string) {
   const a = left.trim().toUpperCase();
   const b = right.trim().toUpperCase();
   if (a === b) return true;
-  return canonicalPieceCode(a) === canonicalPieceCode(b);
+  if (canonicalPieceCode(a) === canonicalPieceCode(b)) return true;
+  return stripNamedPiecePrefix(a) === stripNamedPiecePrefix(b);
+}
+
+function stripNamedPiecePrefix(code: string) {
+  if (!code.startsWith('PIECE_')) return code;
+  if (/^PIECE_[0-9A-F]{8,}$/i.test(code)) return code;
+  return code.slice('PIECE_'.length);
 }
 
 function toMovePayload(move: NormalizedMove): MovePayload {
