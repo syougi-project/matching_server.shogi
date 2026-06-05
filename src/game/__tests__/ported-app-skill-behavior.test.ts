@@ -81,7 +81,7 @@ describe('ported app.shogi skill behavior', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.nextGame.skillState.board_hazards.length).toBeGreaterThan(0);
+    expect((result.nextGame.skillState?.board_hazards ?? []).length).toBeGreaterThan(0);
   });
 
   test('stateful skills affect later legal move validation', () => {
