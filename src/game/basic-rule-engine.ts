@@ -1925,10 +1925,17 @@ function sameMove(left: NormalizedMove, right: NormalizedMove) {
   return (
     left.from === right.from &&
     left.to === right.to &&
-    left.piece === right.piece &&
+    pieceCodesEquivalent(left.piece, right.piece) &&
     left.promote === right.promote &&
     left.drop === right.drop
   );
+}
+
+function pieceCodesEquivalent(left: string, right: string) {
+  const a = left.trim().toUpperCase();
+  const b = right.trim().toUpperCase();
+  if (a === b) return true;
+  return canonicalPieceCode(a) === canonicalPieceCode(b);
 }
 
 function toMovePayload(move: NormalizedMove): MovePayload {

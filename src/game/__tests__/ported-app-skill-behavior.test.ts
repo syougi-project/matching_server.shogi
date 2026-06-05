@@ -63,6 +63,25 @@ describe('ported app.shogi skill behavior', () => {
     expect(result.nextGame.boardState['4d']).toBe('black:GACHA_KOU');
   });
 
+  test('accepts canonical app piece code in move payload for BFF board code', () => {
+    Math.random = () => 0;
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules: createRules(),
+      game: {
+        ...createSkillGame('PIECE_GACHA_KO'),
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:PIECE_GACHA_KO',
+        },
+      },
+      move: { from: '5e', to: '5f', piece: 'GACHA_KOU' },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   test('maps BFF gacha muro code to shitsu safe-room skill', () => {
     Math.random = () => 0;
     const result = engine.applyMove({
@@ -155,6 +174,7 @@ function createRules(): RuleSnapshot {
     'YAMA',
     'SPIRIT',
     'GACHA_MURO',
+    'PIECE_GACHA_KO',
     ...PORTED_APP_SKILL_CODES,
   ]) {
     piecesByCode[code] = createPiece(code);
