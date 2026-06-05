@@ -172,6 +172,63 @@ describe('createInitialGameFromBattleSetups', () => {
     expect(game.handsState.black.FU).toBe(2);
   });
 
+  test('maps BFF instance ids from battle setup to game codes', () => {
+    const game = createInitialGameFromBattleSetups({
+      rules: {
+        version: 1,
+        createdAt: '2026-05-10T00:00:00.000Z',
+        piecesByCode: {
+          PIECE_C518B11858F2: {
+            pieceCode: 'PIECE_C518B11858F2',
+            canonicalCode: 'PAWN',
+            sfenCode: 'P',
+            char: '歩',
+            name: '歩兵',
+            skill: '',
+            moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+          },
+          FU: {
+            pieceCode: 'FU',
+            canonicalCode: 'FU',
+            sfenCode: 'P',
+            char: '歩',
+            name: '歩兵',
+            skill: '',
+            moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+          },
+        },
+        skillDefinitions: [],
+      },
+      blackSetup: {
+        battleSetupId: 'bsetup_black',
+        ownerUserId: 'user-black',
+        status: 'locked',
+        name: 'black',
+        boardLayout: [{ row: 6, col: 0, pieceId: 1, pieceCode: 'PIECE_C518B11858F2' }],
+        handsLayout: [{ pieceId: 2, pieceCode: 'PIECE_C518B11858F2', count: 2 }],
+        selectedPieceIds: [1, 2],
+        validationSummary: { boardPieceCount: 1, handPieceCount: 2, totalSelectedPieces: 2 },
+        createdAt: '2026-05-10T00:00:00.000Z',
+        updatedAt: '2026-05-10T00:00:00.000Z',
+      },
+      whiteSetup: {
+        battleSetupId: 'bsetup_white',
+        ownerUserId: 'user-white',
+        status: 'locked',
+        name: 'white',
+        boardLayout: [],
+        handsLayout: [],
+        selectedPieceIds: [],
+        validationSummary: { boardPieceCount: 0, handPieceCount: 0, totalSelectedPieces: 0 },
+        createdAt: '2026-05-10T00:00:00.000Z',
+        updatedAt: '2026-05-10T00:00:00.000Z',
+      },
+    });
+
+    expect(game.boardState['9g']).toBe('black:FU');
+    expect(game.handsState.black.FU).toBe(2);
+  });
+
   test('accepts legacy client gacha setup piece codes', async () => {
     const rules = await new RuleSnapshotBuilder(new InMemoryPieceCatalogProvider()).buildSnapshot();
 

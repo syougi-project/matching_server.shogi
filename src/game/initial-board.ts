@@ -1,4 +1,5 @@
 import type { BattleSetupSnapshot, GameSnapshot, PlayerSide, RuleSnapshot } from '@/types/domain';
+import { resolveGamePieceCode, resolveGamePieceCodeFromRules } from '@/catalog/game-piece-code';
 
 const RANKS = 'abcdefghi';
 
@@ -80,23 +81,8 @@ function resolvePlacementPieceCode(
   rules: RuleSnapshot,
 ): string | null {
   for (const upper of placementCodeCandidates(rawCode)) {
-    const direct = rules.piecesByCode[upper];
-    if (direct) return direct.pieceCode.toUpperCase();
+    const gameCode = resolveGamePieceCodeFromRules(rules, upper);
+    if (gameCode) return gameCode;
   }
-
-  for (const upper of placementCodeCandidates(rawCode)) {
-    for (const piece of Object.values(rules.piecesByCode)) {
-      if (piece.sfenCode?.trim().toUpperCase() === upper) {
-        return piece.pieceCode.toUpperCase();
-      }
-      if (piece.canonicalCode?.trim().toUpperCase() === upper) {
-        return piece.pieceCode.toUpperCase();
-      }
-      if (piece.char.trim().toUpperCase() === upper) {
-        return piece.pieceCode.toUpperCase();
-      }
-    }
-  }
-
   return null;
 }

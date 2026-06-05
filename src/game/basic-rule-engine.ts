@@ -1,4 +1,5 @@
 import type { ApplyMoveInput, ApplyMoveResult, RuleEngine } from '@/game/rule-engine';
+import { resolveGamePieceCode, resolveGamePieceCodeFromRules } from '@/catalog/game-piece-code';
 import type {
   GameSnapshot,
   MovePayload,
@@ -154,7 +155,7 @@ export class BasicRuleEngine implements RuleEngine {
       };
     }
 
-    const state = parseGameState(input.game);
+    const state = parseGameState(input.game, input.rules);
     const move = normalizeMove(input.move);
     const applied = applyLegalMove(state, input.rules, input.actorSide, move);
     if (!applied.ok) {
@@ -214,18 +215,38 @@ function createInitialBoardState(rules: RuleSnapshot): Record<string, string> {
   return board;
 }
 
-function parseGameState(game: GameSnapshot): InternalGameState {
+function parseGameState(game: GameSnapshot, rules: RuleSnapshot): InternalGameState {
   const board: InternalBoard = new Map();
   for (const [square, raw] of Object.entries(game.boardState)) {
     const piece = decodePiece(raw);
-    if (piece) board.set(square, piece);
+    if (piece) board.set(square.trim().toLowerCase(), normalizeBoardPiece(piece, rules));
   }
   return {
     board,
-    hands: cloneHands(game.handsState),
+    hands: normalizeHands(cloneHands(game.handsState), rules),
     skillState: parseSkillState(game.skillState),
     turn: game.turn,
   };
+}
+
+function normalizeBoardPiece(piece: InternalPiece, rules: RuleSnapshot): InternalPiece {
+  const definition = resolvePieceDefinition(rules, piece);
+  if (!definition) return piece;
+  const gameCode = resolveGamePieceCode(definition);
+  if (gameCode === piece.code) return piece;
+  return { ...piece, code: gameCode };
+}
+
+function normalizeHands(hands: InternalHands, rules: RuleSnapshot): InternalHands {
+  const next: InternalHands = { black: {}, white: {} };
+  for (const side of ['black', 'white'] as const) {
+    for (const [rawCode, count] of Object.entries(hands[side])) {
+      if (!count) continue;
+      const gameCode = resolveGamePieceCodeFromRules(rules, rawCode) ?? rawCode.trim().toUpperCase();
+      next[side][gameCode] = (next[side][gameCode] ?? 0) + count;
+    }
+  }
+  return next;
 }
 
 function normalizeMove(move: MovePayload): NormalizedMove {
@@ -246,7 +267,7 @@ function applyLegalMove(
   move: NormalizedMove,
 ): AppliedStateResult {
   const legalMoves = generateLegalMoves(state, rules, actorSide);
-  const matched = legalMoves.find((candidate) => sameMove(candidate, move));
+  const matched = legalMoves.find((candidate) => sameMove(candidate, move, rules));
   if (!matched) {
     return {
       ok: false,
@@ -1480,7 +1501,12 @@ function isIllegalPawnDropMate(state: InternalGameState, rules: RuleSnapshot, de
 }
 
 function resolvePieceDefinition(rules: RuleSnapshot, piece: InternalPiece) {
-  return rules.piecesByCode[piece.code] ?? rules.piecesByCode[canonicalPieceCode(piece.code)] ?? null;
+  return (
+    rules.piecesByCode[piece.code] ??
+    rules.piecesByCode[canonicalPieceCode(piece.code)] ??
+    Object.values(rules.piecesByCode).find((def) => def.pieceCode.toUpperCase() === piece.code) ??
+    null
+  );
 }
 
 function createEmptySkillState(): SkillState {
@@ -1922,14 +1948,25 @@ function decrementHand(hands: InternalHands, side: PlayerSide, pieceCode: string
   hands[side][pieceCode] = current - 1;
 }
 
-function sameMove(left: NormalizedMove, right: NormalizedMove) {
+function sameMove(left: NormalizedMove, right: NormalizedMove, rules: RuleSnapshot) {
   return (
     left.from === right.from &&
     left.to === right.to &&
-    pieceCodesEquivalent(left.piece, right.piece) &&
+    pieceCodesEquivalentForRules(rules, left.piece, right.piece) &&
     left.promote === right.promote &&
     left.drop === right.drop
   );
+}
+
+function pieceCodesEquivalentForRules(rules: RuleSnapshot, left: string, right: string) {
+  if (pieceCodesEquivalent(left, right)) return true;
+  const leftGame = resolveGamePieceCodeFromRules(rules, left);
+  const rightGame = resolveGamePieceCodeFromRules(rules, right);
+  if (leftGame && rightGame && leftGame === rightGame) return true;
+  const leftDef = rules.piecesByCode[left.trim().toUpperCase()];
+  const rightDef = rules.piecesByCode[right.trim().toUpperCase()];
+  if (leftDef && rightDef) return resolveGamePieceCode(leftDef) === resolveGamePieceCode(rightDef);
+  return false;
 }
 
 function pieceCodesEquivalent(left: string, right: string) {

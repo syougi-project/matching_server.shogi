@@ -146,6 +146,102 @@ describe('GameCommandService', () => {
     expect(updated.game.turn).toBe('white');
   });
 
+  test('accepts moves when stored board squares use mixed case keys', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '7G': 'black:FU',
+        },
+      },
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 1,
+      move: { from: '7g', to: '7f', piece: 'FU', promote: false, drop: false },
+    });
+
+    expect(updated.game.boardState['7f']).toBe('black:FU');
+  });
+
+  test('accepts FU move payload when board stores BFF instance piece codes', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    await context.repositories.matches.save({
+      ...match!,
+      ruleSnapshot: {
+        ...match!.ruleSnapshot,
+        piecesByCode: {
+          ...match!.ruleSnapshot.piecesByCode,
+          PIECE_C518B11858F2: {
+            pieceCode: 'PIECE_C518B11858F2',
+            canonicalCode: 'PAWN',
+            sfenCode: 'P',
+            char: '歩',
+            name: '歩兵',
+            skill: '',
+            moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+            promotable: true,
+          },
+          FU: match!.ruleSnapshot.piecesByCode.FU,
+        },
+      },
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '7g': 'black:PIECE_C518B11858F2',
+        },
+      },
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 1,
+      move: { from: '7g', to: '7f', piece: 'FU', promote: false, drop: false },
+    });
+
+    expect(updated.game.boardState['7f']).toBe('black:FU');
+    expect(updated.game.boardState['7g']).toBeUndefined();
+  });
+
   test('rejects illegal backward pawn move', async () => {
     const context = createServerContext();
 
@@ -241,7 +337,7 @@ describe('GameCommandService', () => {
       move: { from: '5e', to: '5f', piece: 'GACHA_KOU', promote: false, drop: false },
     });
 
-    expect(updated.game.boardState['5f']).toBe('black:PIECE_GACHA_KO');
+    expect(updated.game.boardState['5f']).toBe('black:GACHA_KOU');
   });
 
   test('rejects nifu pawn drop', async () => {
