@@ -82,6 +82,29 @@ describe('ported app.shogi skill behavior', () => {
     expect(result.ok).toBe(true);
   });
 
+  test('maps BFF gacha baku code to adjacent push skill', () => {
+    Math.random = () => 0;
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules: createRules(),
+      game: {
+        ...createSkillGame('PIECE_GACHA_BAKU'),
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:PIECE_GACHA_BAKU',
+          '6e': 'black:FU',
+        },
+      },
+      move: { from: '5e', to: '5f', piece: 'PIECE_GACHA_BAKU' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['6e']).toBeUndefined();
+    expect(result.nextGame.boardState['7d']).toBe('black:FU');
+  });
+
   test('maps BFF gacha muro code to shitsu safe-room skill', () => {
     Math.random = () => 0;
     const result = engine.applyMove({
@@ -175,6 +198,7 @@ function createRules(): RuleSnapshot {
     'SPIRIT',
     'GACHA_MURO',
     'PIECE_GACHA_KO',
+    'PIECE_GACHA_BAKU',
     ...PORTED_APP_SKILL_CODES,
   ]) {
     piecesByCode[code] = createPiece(code);
@@ -188,10 +212,18 @@ function createRules(): RuleSnapshot {
 }
 
 function createPiece(pieceCode: string): PieceDefinition {
+  const gachaCharByCode: Record<string, string> = {
+    PIECE_GACHA_BAKU: '爆',
+    PIECE_GACHA_KO: '膠',
+    GACHA_BAKU: '爆',
+    GACHA_KOU: '膠',
+    GACHA_MURO: '室',
+    GACHA_SHITSU: '室',
+  };
   return {
     pieceCode,
     canonicalCode: pieceCode,
-    char: pieceCode,
+    char: gachaCharByCode[pieceCode] ?? pieceCode,
     name: pieceCode,
     skill: '',
     moveVectors: [

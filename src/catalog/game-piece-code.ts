@@ -1,4 +1,8 @@
 import type { PieceDefinition } from '@/types/domain';
+import {
+  normalizeGachaSkillPieceCode,
+  resolveGachaGamePieceCode,
+} from '@/catalog/gacha-skill-piece-code';
 
 const STANDARD_CANONICAL_TO_GAME_CODE: Record<string, string> = {
   PAWN: 'FU',
@@ -64,6 +68,9 @@ export function resolveGamePieceCode(piece: PieceDefinition): string {
 
   const byChar = STANDARD_CHAR_TO_GAME_CODE[piece.char.trim()];
   if (byChar) return piece.isPromoted ? (PROMOTED_STANDARD_CODE[byChar] ?? byChar) : byChar;
+
+  const gachaCode = resolveGachaGamePieceCode(piece.char, piece.pieceCode);
+  if (gachaCode) return gachaCode;
 
   return piece.pieceCode.trim().toUpperCase();
 }

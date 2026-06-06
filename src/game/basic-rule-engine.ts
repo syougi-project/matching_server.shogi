@@ -1,4 +1,5 @@
 import type { ApplyMoveInput, ApplyMoveResult, RuleEngine } from '@/game/rule-engine';
+import { normalizeGachaSkillPieceCode } from '@/catalog/gacha-skill-piece-code';
 import { resolveGamePieceCode, resolveGamePieceCodeFromRules } from '@/catalog/game-piece-code';
 import type {
   GameSnapshot,
@@ -189,15 +190,6 @@ export class BasicRuleEngine implements RuleEngine {
       };
     }
 
-    const opponentMoves = generateLegalMoves(nextState, input.rules, nextTurn);
-    if (opponentMoves.length === 0 && isKingInCheck(nextState.board, input.rules, nextTurn)) {
-      return {
-        ok: true,
-        nextGame,
-        finished: { winnerSide: input.actorSide, reason: 'checkmate' },
-      };
-    }
-
     return { ok: true, nextGame };
   }
 }
@@ -297,20 +289,13 @@ function generateLegalMoves(
     if (piece.side !== side) continue;
     if (isPieceImmobilized(state.skillState, piece, square)) continue;
     const pseudoMoves = generatePseudoMovesForPiece(state.board, state.skillState, rules, square, piece);
-    for (const move of pseudoMoves) {
-      const next = applyMoveUnchecked(state, rules, side, move, false);
-      if (!isKingInCheck(next.board, rules, side)) {
-        moves.push(move);
-      }
-    }
+    moves.push(...pseudoMoves);
   }
 
   for (const drop of generateDropMoves(state, rules, side)) {
     const next = applyMoveUnchecked(state, rules, side, drop, false);
-    if (!isKingInCheck(next.board, rules, side)) {
-      if (drop.piece === 'FU' && isIllegalPawnDropMate(next, rules, opposite(side))) continue;
-      moves.push(drop);
-    }
+    if (drop.piece === 'FU' && isIllegalPawnDropMate(next, rules, opposite(side))) continue;
+    moves.push(drop);
   }
 
   return moves;
@@ -587,7 +572,7 @@ function applySkills(rules: RuleSnapshot, context: SkillContext) {
     }
   }
 
-  applied = applyScriptedPieceSkills(context) || applied;
+  applied = applyScriptedPieceSkills(rules, context) || applied;
 
   return applied;
 }
@@ -1188,9 +1173,12 @@ function moveKingSameVector(context: SkillContext) {
   return true;
 }
 
-function applyScriptedPieceSkills(context: SkillContext) {
+function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
   let applied = false;
-  const movedCode = normalizeSkillPieceCode(context.movedPiece.code);
+  const movedCode = normalizeSkillPieceCode(
+    context.movedPiece.code,
+    resolvePieceDefinition(rules, context.movedPiece)?.char,
+  );
   if (!context.move.drop && context.fromSquare) {
     if (movedCode === 'FLAME' || movedCode === 'ENN') {
       applied = chance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
@@ -1823,15 +1811,10 @@ function tickSkillList(list: Record<string, unknown>[]) {
   return out;
 }
 
-function normalizeSkillPieceCode(raw: string) {
-  const upper = raw.trim().toUpperCase();
-  if (upper === 'GACHA_KOU' || upper === 'GACHA_KO' || upper === 'PIECE_GACHA_KO') return 'GACHA_KOU';
-  if (upper === 'GACHA_MURO' || upper === 'PIECE_GACHA_MURO' || upper === 'PIECE_GACHA_SHITSU') {
-    return 'GACHA_SHITSU';
-  }
-  if (upper === 'PIECE_GACHA_TO') return 'GACHA_TOU2';
-  if (upper === 'WATER') return 'SUI';
-  return upper;
+function normalizeSkillPieceCode(raw: string, char?: string | null) {
+  const normalized = normalizeGachaSkillPieceCode(raw, char);
+  if (normalized === 'WATER') return 'SUI';
+  return normalized;
 }
 
 function canonicalPieceCode(raw: string) {
