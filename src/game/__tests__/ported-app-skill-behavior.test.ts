@@ -105,6 +105,81 @@ describe('ported app.shogi skill behavior', () => {
     expect(result.nextGame.boardState['7d']).toBe('black:FU');
   });
 
+  test('maps instance id flame piece by char to enn skill', () => {
+    Math.random = () => 0;
+    const rules = createRules();
+    rules.piecesByCode.PIECE_FLAME_INSTANCE = {
+      ...createPiece('ENN'),
+      pieceCode: 'PIECE_FLAME_INSTANCE',
+      canonicalCode: 'ENN',
+      char: '炎',
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game: {
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:PIECE_FLAME_INSTANCE',
+          '4f': 'white:FU',
+        },
+        handsState: { black: {}, white: {} },
+        skillState: {
+          board_hazards: [],
+          board_arrow_tiles: [],
+          movement_modifiers: [],
+          piece_statuses: [],
+          piece_defenses: [],
+        },
+        turn: 'black',
+        moveCount: 0,
+        version: 1,
+      },
+      move: { from: '5e', to: '5f', piece: 'PIECE_FLAME_INSTANCE' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['4f']).toBeUndefined();
+  });
+
+  test.each([
+    ['PIECE_GACHA_BAKU', '爆'],
+    ['PIECE_GACHA_MURO', '室'],
+    ['PIECE_GACHA_SADAME', '定'],
+    ['PIECE_GACHA_AN', '安'],
+    ['PIECE_GACHA_SO', '宋'],
+    ['PIECE_GACHA_TOU', '灯'],
+    ['PIECE_GACHA_HEN', '辺'],
+    ['PIECE_GACHA_ITSU', '逸'],
+    ['PIECE_GACHA_TO', '逃'],
+    ['PIECE_GACHA_SOU', '艸'],
+    ['PIECE_GACHA_KO', '膠'],
+  ] as const)('accepts BFF board code %s for scripted skill move', (boardCode, char) => {
+    Math.random = () => 0;
+    const rules = createRules();
+    rules.piecesByCode[boardCode] = {
+      ...createPiece(boardCode),
+      char,
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game: {
+        ...createSkillGame(boardCode),
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': `black:${boardCode}`,
+        },
+      },
+      move: { from: '5e', to: '5f', piece: boardCode },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   test('maps BFF gacha muro code to shitsu safe-room skill', () => {
     Math.random = () => 0;
     const result = engine.applyMove({
@@ -219,6 +294,16 @@ function createPiece(pieceCode: string): PieceDefinition {
     GACHA_KOU: '膠',
     GACHA_MURO: '室',
     GACHA_SHITSU: '室',
+    PIECE_GACHA_SADAME: '定',
+    PIECE_GACHA_AN: '安',
+    PIECE_GACHA_SO: '宋',
+    PIECE_GACHA_TOU: '灯',
+    PIECE_GACHA_HEN: '辺',
+    PIECE_GACHA_ITSU: '逸',
+    PIECE_GACHA_TO: '逃',
+    PIECE_GACHA_SOU: '艸',
+    ENN: '炎',
+    FLAME: '炎',
   };
   return {
     pieceCode,

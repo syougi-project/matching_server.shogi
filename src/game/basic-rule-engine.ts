@@ -1,5 +1,5 @@
 import type { ApplyMoveInput, ApplyMoveResult, RuleEngine } from '@/game/rule-engine';
-import { normalizeGachaSkillPieceCode } from '@/catalog/gacha-skill-piece-code';
+import { normalizePortedSkillPieceCode } from '@/catalog/ported-skill-piece-code';
 import { resolveGamePieceCode, resolveGamePieceCodeFromRules } from '@/catalog/game-piece-code';
 import type {
   GameSnapshot,
@@ -1175,10 +1175,12 @@ function moveKingSameVector(context: SkillContext) {
 
 function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
   let applied = false;
-  const movedCode = normalizeSkillPieceCode(
-    context.movedPiece.code,
-    resolvePieceDefinition(rules, context.movedPiece)?.char,
-  );
+  const pieceDef = resolvePieceDefinition(rules, context.movedPiece);
+  const resolvedCode =
+    (pieceDef ? resolveGamePieceCode(pieceDef) : null) ??
+    resolveGamePieceCodeFromRules(rules, context.movedPiece.code) ??
+    context.movedPiece.code;
+  const movedCode = normalizeSkillPieceCode(resolvedCode, pieceDef?.char);
   if (!context.move.drop && context.fromSquare) {
     if (movedCode === 'FLAME' || movedCode === 'ENN') {
       applied = chance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
@@ -1812,9 +1814,7 @@ function tickSkillList(list: Record<string, unknown>[]) {
 }
 
 function normalizeSkillPieceCode(raw: string, char?: string | null) {
-  const normalized = normalizeGachaSkillPieceCode(raw, char);
-  if (normalized === 'WATER') return 'SUI';
-  return normalized;
+  return normalizePortedSkillPieceCode(raw, char);
 }
 
 function canonicalPieceCode(raw: string) {

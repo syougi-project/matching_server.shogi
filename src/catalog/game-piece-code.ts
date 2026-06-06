@@ -1,8 +1,14 @@
 import type { PieceDefinition } from '@/types/domain';
+import { PORTED_APP_SKILL_CODES } from '@/game/ported-app-skill-codes';
 import {
-  normalizeGachaSkillPieceCode,
   resolveGachaGamePieceCode,
 } from '@/catalog/gacha-skill-piece-code';
+import {
+  normalizePortedSkillPieceCode,
+  resolvePortedGamePieceCode,
+} from '@/catalog/ported-skill-piece-code';
+
+const PORTED_SKILL_CODE_SET = new Set<string>(PORTED_APP_SKILL_CODES);
 
 const STANDARD_CANONICAL_TO_GAME_CODE: Record<string, string> = {
   PAWN: 'FU',
@@ -71,6 +77,14 @@ export function resolveGamePieceCode(piece: PieceDefinition): string {
 
   const gachaCode = resolveGachaGamePieceCode(piece.char, piece.pieceCode);
   if (gachaCode) return gachaCode;
+
+  const portedCode = resolvePortedGamePieceCode(piece.char, piece.pieceCode);
+  if (portedCode) return portedCode;
+
+  const normalized = normalizePortedSkillPieceCode(piece.pieceCode, piece.char);
+  if (normalized !== piece.pieceCode.trim().toUpperCase() && PORTED_SKILL_CODE_SET.has(normalized)) {
+    return normalized;
+  }
 
   return piece.pieceCode.trim().toUpperCase();
 }
