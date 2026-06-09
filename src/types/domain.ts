@@ -103,6 +103,7 @@ export type MovePayload = {
   piece: string;
   promote?: boolean;
   drop?: boolean;
+  notation?: string;
 };
 
 export type GameSnapshot = {

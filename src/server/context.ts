@@ -1,5 +1,7 @@
 import { BffPieceCatalogProvider } from '@/catalog/bff-piece-catalog';
 import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
+import { MergedPieceCatalogProvider } from '@/catalog/merged-piece-catalog';
+import type { PieceCatalogProvider } from '@/catalog/contracts';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import { loadConfig } from '@/lib/config';
@@ -29,6 +31,7 @@ export type ServerContextOverrides = {
     matches?: MatchRepository;
     integrationEvents?: IntegrationEventRepository;
   };
+  pieceCatalog?: PieceCatalogProvider;
 };
 
 export function createServerContext(overrides: ServerContextOverrides = {}) {
@@ -38,9 +41,14 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
   const matches = overrides.repositories?.matches ?? new InMemoryMatchRepository();
   const integrationEvents =
     overrides.repositories?.integrationEvents ?? new InMemoryIntegrationEventRepository();
-  const pieceCatalog = config.bffBaseUrl
-    ? new BffPieceCatalogProvider(config.bffBaseUrl)
-    : new InMemoryPieceCatalogProvider();
+  const pieceCatalog =
+    overrides.pieceCatalog ??
+    (config.bffBaseUrl
+      ? new MergedPieceCatalogProvider(
+          new BffPieceCatalogProvider(config.bffBaseUrl),
+          new InMemoryPieceCatalogProvider(),
+        )
+      : new InMemoryPieceCatalogProvider());
   const ruleSnapshotBuilder = new RuleSnapshotBuilder(pieceCatalog);
   const ruleEngine = new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);

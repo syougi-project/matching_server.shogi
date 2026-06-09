@@ -325,6 +325,13 @@ function applySocketIdentity(
 
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? '3010');
+  const ticketSecret = process.env.MATCHING_TICKET_SECRET?.trim();
+  if (ticketSecret?.includes('<') || ticketSecret?.includes('bff.shogi')) {
+    console.warn(
+      '[matching_server] MATCHING_TICKET_SECRET がプレースホルダーのままです。' +
+        ' PowerShell で設定した $env:MATCHING_* を削除するか、新しいターミナルで bun run dev:ws を起動してください。',
+    );
+  }
   startLocalDevServer(port);
   console.log(`[matching_server] local websocket server listening on ws://localhost:${port}/ws`);
 }

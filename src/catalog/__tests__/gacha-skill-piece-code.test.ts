@@ -12,6 +12,8 @@ describe('gacha-skill-piece-code', () => {
     ['PIECE_GACHA_MURO', 'GACHA_SHITSU'],
     ['PIECE_GACHA_TO', 'GACHA_TOU2'],
     ['GACHA_BAKU', 'GACHA_BAKU'],
+    ['PIECE_GACHA_AORI', 'GACHA_AORI'],
+    ['piece_gacha_aori', 'GACHA_AORI'],
   ] as const)('normalizeGachaSkillPieceCode(%s) -> %s', (raw, expected) => {
     expect(normalizeGachaSkillPieceCode(raw)).toBe(expected);
   });
@@ -22,5 +24,6 @@ describe('gacha-skill-piece-code', () => {
 
   test('resolveGachaGamePieceCode prefers char mapping', () => {
     expect(resolveGachaGamePieceCode('爆', 'piece_gacha_baku')).toBe('GACHA_BAKU');
+    expect(resolveGachaGamePieceCode('煽', 'piece_gacha_aori')).toBe('GACHA_AORI');
   });
 });

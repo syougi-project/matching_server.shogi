@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
 import { createServerContext } from '@/server/context';
 import type { GameSnapshot } from '@/types/domain';
 
@@ -340,6 +341,54 @@ describe('GameCommandService', () => {
     expect(updated.game.boardState['5f']).toBe('black:GACHA_KOU');
   });
 
+  test('accepts legal pawn drop from hand', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    const customGame: GameSnapshot = {
+      ...match!.game,
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '7g': 'black:FU',
+      },
+      handsState: {
+        black: { FU: 1 },
+        white: {},
+      },
+      turn: 'black',
+      version: 3,
+    };
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: customGame,
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 3,
+      move: { to: '5e', piece: 'FU', drop: true },
+    });
+
+    expect(updated.game.boardState['5e']).toBe('black:FU');
+    expect(updated.game.handsState.black.FU).toBeUndefined();
+  });
+
   test('rejects nifu pawn drop', async () => {
     const context = createServerContext();
 
@@ -558,6 +607,7 @@ describe('GameCommandService', () => {
       row: 5,
       col: 5,
       movement_rule: 'orthogonal_step_only',
+      remaining_turns: 3,
     });
 
     await expect(
@@ -570,8 +620,131 @@ describe('GameCommandService', () => {
     ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
   });
 
-  test('applies poison skill trail and removes enemy landing on poison cell', async () => {
+  test('applies mai skill diagonal-forward restriction to adjacent enemies', async () => {
     const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:MAI',
+          '4f': 'white:KA',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 10,
+      },
+    });
+
+    const restricted = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 10,
+      move: { from: '5e', to: '5f', piece: 'MAI' },
+    });
+
+    expect(restricted.game.skillState?.movement_modifiers?.[0]).toMatchObject({
+      side: 'white',
+      row: 5,
+      col: 5,
+      movement_rule: 'diagonal_forward_step_only',
+      remaining_turns: 999,
+    });
+
+    await expect(
+      context.services.gameCommand.makeMove({
+        matchId: match!.matchId,
+        userId: match!.playerWhiteUserId,
+        expectedVersion: restricted.game.version,
+        move: { from: '4f', to: '4e', piece: 'KA' },
+      }),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_MOVE' });
+  });
+
+  test('allows naku diagonal moves via silver-like vectors', async () => {
+    const context = createServerContext({
+      pieceCatalog: new InMemoryPieceCatalogProvider(),
+    });
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5g': 'black:NAKU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 10,
+      },
+    });
+
+    const moved = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 10,
+      move: { from: '5g', to: '4f', piece: 'NAKU' },
+    });
+
+    expect(moved.game.boardState['4f']).toBe('black:NAKU');
+    expect(moved.game.boardState['5g']).toBeUndefined();
+  });
+
+  test('applies naku pon capture to up to three same-type enemies', async () => {
+    const context = createServerContext({
+      pieceCatalog: new InMemoryPieceCatalogProvider(),
+    });
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5g': 'black:NAKU',
+          '6f': 'white:FU',
+          '5f': 'white:FU',
+          '4f': 'white:FU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 10,
+      },
+    });
+
+    const captured = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 10,
+      move: { from: '5g', to: '5f', piece: 'NAKU' },
+    });
+
+    expect(captured.game.boardState['6f']).toBeUndefined();
+    expect(captured.game.boardState['4f']).toBeUndefined();
+    expect(captured.game.boardState['5f']).toBe('black:NAKU');
+    expect(captured.game.handsState.black.FU).toBe(3);
+    expect(captured.game.lastSkillTriggered).toBe(true);
+  });
+
+  test('applies poison skill trail and removes enemy landing on poison cell', async () => {
+    const context = createServerContext({
+      pieceCatalog: new InMemoryPieceCatalogProvider(),
+    });
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
     const match = await context.services.matchmaking.runOnce();
@@ -613,6 +786,38 @@ describe('GameCommandService', () => {
       move: { from: '5d', to: '5e', piece: 'FU' },
     });
 
+    expect(updated.game.boardState['5e']).toBeUndefined();
+  });
+
+  test('accepts GACHA_AORI multi-square orthogonal slide', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    const match = await context.services.matchmaking.runOnce();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:GACHA_AORI',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 11,
+      },
+    });
+
+    const updated = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 11,
+      move: { from: '5e', to: '5c', piece: 'GACHA_AORI' },
+    });
+
+    expect(updated.game.boardState['5c']).toBe('black:GACHA_AORI');
     expect(updated.game.boardState['5e']).toBeUndefined();
   });
 

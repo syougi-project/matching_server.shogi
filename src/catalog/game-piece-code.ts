@@ -48,7 +48,6 @@ const STANDARD_CHAR_TO_GAME_CODE: Record<string, string> = {
   成銀: 'NG',
   馬: 'UM',
   龍: 'RY',
-  竜: 'RY',
 };
 
 const PROMOTED_STANDARD_CODE: Record<string, string> = {

@@ -1,4 +1,11 @@
 import type { PieceCatalogProvider } from '@/catalog/contracts';
+import { AORI_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
+import {
+  RYU_DRAGON_MOVE_VECTORS,
+  SPRING_MOVE_VECTORS,
+  TATSU_DRAGON_AWAKENED_MOVE_VECTORS,
+} from '@/game/spring-ryu-awakening';
+import { WAVE_MOVE_VECTORS } from '@/game/shop-piece-move-vectors';
 import type { PieceDefinition } from '@/types/domain';
 
 const DEFAULT_PIECES: PieceDefinition[] = [
@@ -108,7 +115,7 @@ const DEFAULT_PIECES: PieceDefinition[] = [
             pieceCodes: ['MIST'],
             pieceChars: ['霧'],
             trigger: { type: 'after_move' },
-            conditions: [],
+            conditions: [{ type: 'chance_roll', params: { procChance: 0.3 } }],
             effects: [
               {
                 type: 'send_to_hand',
@@ -155,6 +162,30 @@ const DEFAULT_PIECES: PieceDefinition[] = [
     promotable: false,
     skill: 'push_adjacent_enemy_one_step',
   }),
+  createPiece('NAM', '波', 'Wave', WAVE_MOVE_VECTORS, {
+    sfenCode: 'WAVE',
+    canonicalCode: 'NAM',
+    promotable: false,
+    skill: 'push_adjacent_enemy_one_step',
+  }),
+  createPiece('RYU', '竜', 'Small Dragon', RYU_DRAGON_MOVE_VECTORS, {
+    sfenCode: 'F',
+    canonicalCode: 'RYU',
+    promotable: false,
+    skill: 'spring_awaken_to_tatsu',
+  }),
+  createPiece('SPRING', '泉', 'Spring', SPRING_MOVE_VECTORS, {
+    sfenCode: 'ZQN',
+    canonicalCode: 'SPRING',
+    promotable: false,
+    skill: 'spring_random_ally_immunity',
+  }),
+  createPiece('TATSU', '辰', 'Tatsu', TATSU_DRAGON_AWAKENED_MOVE_VECTORS, {
+    sfenCode: 'ZTS',
+    canonicalCode: 'TATSU',
+    promotable: false,
+    skill: 'tatsu_adjacent_vanish',
+  }),
   createPiece('IRON', '鉄', 'Iron', kingLikeVectors(), {
     promotable: false,
     skill: 'push_adjacent_enemy_one_step',
@@ -162,6 +193,34 @@ const DEFAULT_PIECES: PieceDefinition[] = [
   createPiece('RAINBOW', '虹', 'Rainbow', kingLikeVectors(), {
     promotable: false,
     skill: 'adjacent_enemy_orthogonal_step_only',
+  }),
+  createPiece('MAI', '舞', 'Mai', goldLikeVectors(), {
+    promotable: false,
+    skill: 'adjacent_enemy_diagonal_forward_step_only',
+  }),
+  createPiece('NAKU', '鳴', 'Naku', [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ], {
+    promotable: false,
+    skill: 'naku_pon_capture',
+  }),
+  createPiece('TANE', '種', 'Tane', [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ], {
+    promotable: false,
+    skill: 'summon_leaf_adjacent',
+  }),
+  createPiece('HAA', '葉', 'Leaf', kingLikeVectors(), {
+    promotable: false,
+    skill: 'summon_leaf_adjacent',
   }),
   createPiece('POISON', '毒', 'Poison', kingLikeVectors(), {
     promotable: false,
@@ -172,6 +231,11 @@ const DEFAULT_PIECES: PieceDefinition[] = [
     canonicalCode: 'GACHA_KOU',
     promotable: false,
     skill: 'follow_adjacent_ally_move',
+  }),
+  createPiece('GACHA_AORI', '煽', 'Aori', AORI_MOVE_VECTORS, {
+    sfenCode: 'GACHA_AORI',
+    canonicalCode: 'GACHA_AORI',
+    promotable: false,
   }),
 ];
 
@@ -225,6 +289,17 @@ function createPiece(
     skillDefinitionsV2: overrides?.skillDefinitionsV2 ?? null,
     sfenCode: overrides?.sfenCode ?? null,
   };
+}
+
+function goldLikeVectors(): PieceDefinition['moveVectors'] {
+  return [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 0, maxStep: 1 },
+    { dx: 1, dy: 0, maxStep: 1 },
+    { dx: 0, dy: 1, maxStep: 1 },
+  ];
 }
 
 function kingLikeVectors(): PieceDefinition['moveVectors'] {

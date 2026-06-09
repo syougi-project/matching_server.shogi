@@ -15,6 +15,7 @@ const GACHA_CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   逃: 'GACHA_TOU2',
   艸: 'GACHA_SOU',
   膠: 'GACHA_KOU',
+  煽: 'GACHA_AORI',
 };
 
 /** BFF / 旧クライアントの pieceCode 別名 */
@@ -36,6 +37,8 @@ const EXPLICIT_GACHA_CODE_ALIASES: Readonly<Record<string, string>> = {
   PIECE_GACHA_ITSU: 'GACHA_ITSU',
   PIECE_GACHA_TOU2: 'GACHA_TOU2',
   PIECE_GACHA_SOU: 'GACHA_SOU',
+  PIECE_GACHA_AORI: 'GACHA_AORI',
+  GACHA_AORI: 'GACHA_AORI',
 };
 
 function gachaSuffixToSkillCode(suffix: string): string | null {

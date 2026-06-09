@@ -6,6 +6,7 @@ import {
   type PvpCatalogNormalizer,
 } from '@/catalog/pvp-catalog-normalize';
 import { resolveGamePieceCode } from '@/catalog/game-piece-code';
+import { mergeSkillDefinitions } from '@/game/skill-definitions';
 import type { PieceDefinition, RuleSnapshot, SkillDefinition } from '@/types/domain';
 
 export class RuleSnapshotBuilder {
@@ -39,7 +40,7 @@ export class RuleSnapshotBuilder {
       version: 1,
       createdAt: nowIso(),
       piecesByCode,
-      skillDefinitions,
+      skillDefinitions: mergeSkillDefinitions(skillDefinitions),
     };
   }
 }

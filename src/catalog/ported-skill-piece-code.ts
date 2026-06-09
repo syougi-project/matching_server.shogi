@@ -11,6 +11,7 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   波: 'NAM',
   木: 'MOK',
   葉: 'HAA',
+  種: 'TANE',
   闇: 'YAM',
   魔: 'MAK',
   鉄: 'IRON',
@@ -18,6 +19,8 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   宝: 'TREASURE',
   電: 'ELECTRIC',
   雷: 'THUNDER',
+  時: 'TIME',
+  獣: 'BEAST',
   氷: 'ICE',
   雪: 'SNOW',
   砂: 'SAND',
@@ -38,6 +41,8 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   薔: 'ROSE',
   菊: 'CHRYSANTHEMUM',
   辰: 'TATSU',
+  竜: 'RYU',
+  泉: 'SPRING',
   実: 'EXPERIMENT',
   轟: 'BIGNOISE',
   犇: 'BULL',
@@ -55,6 +60,8 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   逃: 'GACHA_TOU2',
   艸: 'GACHA_SOU',
   膠: 'GACHA_KOU',
+  煽: 'GACHA_AORI',
+  舞: 'MAI',
 };
 
 function stripNamedPiecePrefix(code: string): string {

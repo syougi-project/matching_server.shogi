@@ -201,6 +201,41 @@ describe('ported app.shogi skill behavior', () => {
     expect((result.nextGame.skillState?.board_hazards ?? []).length).toBeGreaterThan(0);
   });
 
+  test('tane move summons leaf on adjacent empty cell when proc succeeds', () => {
+    Math.random = () => 0;
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules: createRules(),
+      game: {
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:TANE',
+        },
+        handsState: { black: {}, white: {} },
+        skillState: {
+          board_hazards: [],
+          board_arrow_tiles: [],
+          movement_modifiers: [],
+          piece_statuses: [],
+          piece_defenses: [],
+        },
+        turn: 'black',
+        moveCount: 0,
+        version: 1,
+      },
+      move: { from: '5e', to: '5d', piece: 'TANE' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const leafSquares = Object.entries(result.nextGame.boardState).filter(([, piece]) =>
+      piece.includes(':HAA'),
+    );
+    expect(leafSquares.length).toBe(1);
+    expect(result.nextGame.lastSkillTriggered).toBe(true);
+  });
+
   test('stateful skills affect later legal move validation', () => {
     Math.random = () => 0;
     const rainbow = engine.applyMove({
@@ -305,10 +340,20 @@ function createPiece(pieceCode: string): PieceDefinition {
     ENN: '炎',
     FLAME: '炎',
   };
+  const shopCharByCode: Record<string, string> = {
+    TANE: '種',
+    SHOP_TANE: '種',
+    HAA: '葉',
+    LEAF: '葉',
+    NAKU: '鳴',
+    SHOP_NAKU: '鳴',
+    MAI: '舞',
+    SHOP_MAI: '舞',
+  };
   return {
     pieceCode,
     canonicalCode: pieceCode,
-    char: gachaCharByCode[pieceCode] ?? pieceCode,
+    char: gachaCharByCode[pieceCode] ?? shopCharByCode[pieceCode] ?? pieceCode,
     name: pieceCode,
     skill: '',
     moveVectors: [
