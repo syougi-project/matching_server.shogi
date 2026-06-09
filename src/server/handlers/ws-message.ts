@@ -20,6 +20,16 @@ export function buildGameStateUpdatedMessage(match: MatchSession): GameStateUpda
   };
 }
 
+export function buildGameFinishedMessage(match: MatchSession) {
+  return {
+    type: 'game_finished' as const,
+    matchId: match.matchId,
+    status: match.status === 'aborted' ? ('aborted' as const) : ('finished' as const),
+    winnerUserId: match.winnerUserId,
+    reason: match.endReason ?? 'unknown',
+  };
+}
+
 export async function handleWebSocketMessage(
   context: ServerContext,
   connectionId: string,

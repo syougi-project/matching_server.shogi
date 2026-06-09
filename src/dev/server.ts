@@ -128,6 +128,15 @@ export function startLocalDevServer(port = 3010) {
                 trustedMessage.userId,
                 buildGameStateUpdatedMessage(match),
               );
+              if (match.status === 'finished') {
+                await broadcastToMatch(runtime, match, {
+                  type: 'game_finished',
+                  matchId: match.matchId,
+                  status: 'finished',
+                  winnerUserId: match.winnerUserId,
+                  reason: match.endReason ?? 'king_capture',
+                });
+              }
             }
             return;
           }

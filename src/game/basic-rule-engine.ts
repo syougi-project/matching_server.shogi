@@ -1851,7 +1851,7 @@ function isRecord(raw: unknown): raw is Record<string, unknown> {
 
 function findKingSquare(board: InternalBoard, side: PlayerSide) {
   for (const [square, piece] of board.entries()) {
-    if (piece.side === side && piece.code === 'OU') return square;
+    if (piece.side === side && canonicalPieceCode(piece.code) === 'OU') return square;
   }
   return null;
 }

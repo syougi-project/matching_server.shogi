@@ -1,6 +1,9 @@
 import type { ServerContext } from '@/server/context';
 import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
-import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
+import {
+  buildGameFinishedMessage,
+  buildGameStateUpdatedMessage,
+} from '@/server/handlers/ws-message';
 import { handleWebSocketMessage, profileFor } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import type {
@@ -37,6 +40,11 @@ export class MatchingCore {
             ? match.playerWhiteUserId
             : match.playerBlackUserId;
         broadcasts.push({ userId: opponentUserId, message: update });
+        if (match.status === 'finished') {
+          const finished = buildGameFinishedMessage(match);
+          broadcasts.push({ userId: match.playerBlackUserId, message: finished });
+          broadcasts.push({ userId: match.playerWhiteUserId, message: finished });
+        }
       }
       return { response, broadcasts, match };
     }

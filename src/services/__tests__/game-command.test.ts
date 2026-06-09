@@ -616,6 +616,53 @@ describe('GameCommandService', () => {
     expect(updated.game.boardState['5e']).toBeUndefined();
   });
 
+  test('finishes match when a king is captured', async () => {
+    const context = createServerContext();
+
+    await context.services.queue.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+    });
+    await context.services.queue.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+    });
+
+    const match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    await context.repositories.matches.save({
+      ...match!,
+      game: {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5e': 'black:KA',
+          '4d': 'white:OU',
+        },
+        handsState: { black: {}, white: {} },
+        turn: 'black',
+        version: 3,
+      },
+    });
+
+    const finished = await context.services.gameCommand.makeMove({
+      matchId: match!.matchId,
+      userId: match!.playerBlackUserId,
+      expectedVersion: 3,
+      move: { from: '5e', to: '4d', piece: 'KA' },
+    });
+    const pending = await context.repositories.integrationEvents.listPending();
+
+    expect(finished.status).toBe('finished');
+    expect(finished.winnerUserId).toBe(match!.playerBlackUserId);
+    expect(finished.endReason).toBe('king_capture');
+    expect(finished.game.boardState['4d']).toBe('black:KA');
+    expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
+  });
+
   test('applies glue skill so adjacent ally follows the same move vector', async () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
