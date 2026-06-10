@@ -24,6 +24,8 @@ type InternalBoard = Map<string, PortedPiece>;
 type InternalHands = Record<PlayerSide, Record<string, number>>;
 type SkillState = {
   board_hazards: Record<string, unknown>[];
+  board_arrow_tiles: Record<string, unknown>[];
+  movement_modifiers: Record<string, unknown>[];
   piece_statuses: Record<string, unknown>[];
   piece_defenses: Record<string, unknown>[];
 };

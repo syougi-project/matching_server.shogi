@@ -358,7 +358,22 @@ function generateLegalMoves(
 
   for (const drop of generateDropMoves(state, rules, side)) {
     const next = applyMoveUnchecked(state, rules, side, drop, false);
-    if (drop.piece === 'FU' && isIllegalPawnDropMate(next, rules, opposite(side))) continue;
+    if (
+      drop.piece === 'FU' &&
+      isIllegalPawnDropMate(
+        {
+          board: next.board,
+          hands: next.hands,
+          skillState: next.skillState,
+          turn: next.turn,
+          moveCount: state.moveCount,
+        },
+        rules,
+        opposite(side),
+      )
+    ) {
+      continue;
+    }
     moves.push(drop);
   }
 
@@ -490,6 +505,7 @@ function generatePseudoMovesForPiece(
         piece: piece.code,
         promote,
         drop: false,
+        notation: null,
       });
     }
   }
@@ -523,6 +539,7 @@ function generateDropMoves(
           piece: pieceCode,
           promote: false,
           drop: true,
+          notation: null,
         });
       }
     }

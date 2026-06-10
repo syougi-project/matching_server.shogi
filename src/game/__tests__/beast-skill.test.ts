@@ -33,7 +33,7 @@ describe('beast skill stun', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.nextGame.lastSkillTriggered).toBe(true);
-    const stuns = result.nextGame.skillState.piece_statuses.filter(
+    const stuns = (result.nextGame.skillState?.piece_statuses ?? []).filter(
       (entry) => String(entry.status_type) === 'stun',
     );
     expect(stuns.length).toBe(1);

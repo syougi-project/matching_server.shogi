@@ -4,6 +4,8 @@ import type { RuleSnapshot } from '@/types/domain';
 
 function createRules(): RuleSnapshot {
   return {
+    version: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
     piecesByCode: {
       NAKU: {
         pieceCode: 'NAKU',

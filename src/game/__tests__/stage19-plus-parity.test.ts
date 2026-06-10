@@ -209,6 +209,7 @@ function createPiece(code: string): PieceDefinition {
     sfenCode: code,
     char: charByCode[code] ?? code,
     name: code,
+    skill: '',
     moveVectors: vectors,
     moveRules: [],
     moveConstraints: null,
