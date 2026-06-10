@@ -437,52 +437,58 @@ describe('GameCommandService', () => {
   });
 
   test('applies mist skill to send one adjacent enemy to owner hand', async () => {
-    const context = createServerContext();
+    const originalRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      const context = createServerContext();
 
-    await context.services.queue.enterQueue({
-      userId: 'user-1',
-      connectionId: 'conn-1',
-      rating: 1500,
-    });
-    await context.services.queue.enterQueue({
-      userId: 'user-2',
-      connectionId: 'conn-2',
-      rating: 1500,
-    });
+      await context.services.queue.enterQueue({
+        userId: 'user-1',
+        connectionId: 'conn-1',
+        rating: 1500,
+      });
+      await context.services.queue.enterQueue({
+        userId: 'user-2',
+        connectionId: 'conn-2',
+        rating: 1500,
+      });
 
-    const match = await context.services.matchmaking.runOnce();
-    expect(match).not.toBeNull();
+      const match = await context.services.matchmaking.runOnce();
+      expect(match).not.toBeNull();
 
-    const customGame: GameSnapshot = {
-      ...match!.game,
-      boardState: {
-        '5i': 'black:OU',
-        '5a': 'white:OU',
-        '5e': 'black:MIST',
-        '4f': 'white:FU',
-      },
-      handsState: {
-        black: {},
-        white: {},
-      },
-      turn: 'black',
-      version: 4,
-    };
+      const customGame: GameSnapshot = {
+        ...match!.game,
+        boardState: {
+          '5i': 'black:OU',
+          '5a': 'white:OU',
+          '5e': 'black:MIST',
+          '4f': 'white:FU',
+        },
+        handsState: {
+          black: {},
+          white: {},
+        },
+        turn: 'black',
+        version: 4,
+      };
 
-    await context.repositories.matches.save({
-      ...match!,
-      game: customGame,
-    });
+      await context.repositories.matches.save({
+        ...match!,
+        game: customGame,
+      });
 
-    const updated = await context.services.gameCommand.makeMove({
-      matchId: match!.matchId,
-      userId: match!.playerBlackUserId,
-      expectedVersion: 4,
-      move: { from: '5e', to: '5f', piece: 'MIST' },
-    });
+      const updated = await context.services.gameCommand.makeMove({
+        matchId: match!.matchId,
+        userId: match!.playerBlackUserId,
+        expectedVersion: 4,
+        move: { from: '5e', to: '5f', piece: 'MIST' },
+      });
 
-    expect(updated.game.boardState['4f']).toBeUndefined();
-    expect(updated.game.handsState.white.FU).toBe(1);
+      expect(updated.game.boardState['4f']).toBeUndefined();
+      expect(updated.game.handsState.white.FU).toBe(1);
+    } finally {
+      Math.random = originalRandom;
+    }
   });
 
   test('applies katana skill to capture adjacent enemies after capture', async () => {

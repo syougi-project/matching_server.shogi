@@ -4,7 +4,7 @@ import { MergedPieceCatalogProvider } from '@/catalog/merged-piece-catalog';
 import type { PieceCatalogProvider } from '@/catalog/contracts';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { BasicRuleEngine } from '@/game/basic-rule-engine';
-import { loadConfig } from '@/lib/config';
+import { loadConfig, type MatchingServerConfig } from '@/lib/config';
 import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
 import { BffEventPublisher } from '@/integrations/bff-event-publisher';
 import { BffMatchResultClient } from '@/integrations/bff-match-result-client';
@@ -34,8 +34,15 @@ export type ServerContextOverrides = {
   pieceCatalog?: PieceCatalogProvider;
 };
 
+function shouldUseInMemoryPieceCatalog(config: MatchingServerConfig): boolean {
+  if (process.env.MATCHING_USE_IN_MEMORY_CATALOG === 'true') return true;
+  if (process.env.CI === 'true') return true;
+  return !config.bffBaseUrl;
+}
+
 export function createServerContext(overrides: ServerContextOverrides = {}) {
   const config = loadConfig();
+  const useInMemoryCatalog = overrides.pieceCatalog != null || shouldUseInMemoryPieceCatalog(config);
   const connections = overrides.repositories?.connections ?? new InMemoryConnectionRepository();
   const queue = overrides.repositories?.queue ?? new InMemoryQueueRepository();
   const matches = overrides.repositories?.matches ?? new InMemoryMatchRepository();
@@ -43,21 +50,23 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
     overrides.repositories?.integrationEvents ?? new InMemoryIntegrationEventRepository();
   const pieceCatalog =
     overrides.pieceCatalog ??
-    (config.bffBaseUrl
-      ? new MergedPieceCatalogProvider(
-          new BffPieceCatalogProvider(config.bffBaseUrl),
+    (useInMemoryCatalog
+      ? new InMemoryPieceCatalogProvider()
+      : new MergedPieceCatalogProvider(
+          new BffPieceCatalogProvider(config.bffBaseUrl!),
           new InMemoryPieceCatalogProvider(),
-        )
-      : new InMemoryPieceCatalogProvider());
+        ));
   const ruleSnapshotBuilder = new RuleSnapshotBuilder(pieceCatalog);
   const ruleEngine = new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
-  const battleSetupClient = config.bffBaseUrl
-    ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
-    : null;
-  const matchResultClient = config.bffBaseUrl
-    ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
-    : null;
+  const battleSetupClient =
+    !useInMemoryCatalog && config.bffBaseUrl
+      ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+      : null;
+  const matchResultClient =
+    !useInMemoryCatalog && config.bffBaseUrl
+      ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+      : null;
   const pvpRatingClient = BffPvpRatingClient.fromConfig(config);
   return {
     config,

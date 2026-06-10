@@ -1,4 +1,4 @@
 export function createId(prefix: string) {
-  const suffix = Math.random().toString(36).slice(2, 10);
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
   return `${prefix}_${suffix}`;
 }
