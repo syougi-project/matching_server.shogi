@@ -45,6 +45,7 @@ import {
   isCellAdjacentToAnySaint,
   isConcave,
   isConvex,
+  isOtsu,
   isGiant,
   isHik,
   isMachine,
@@ -57,7 +58,25 @@ import {
   resolvePigInheritedPiece,
   giantAnchorFootprint,
 } from '@/game/ported-app-remaining-pieces';
-import { intrinsicCanJumpOverride, intrinsicMoveVectorOverride } from '@/game/shop-piece-move-vectors';
+import {
+  applyZaiSkillReplaceAllySenWithCaptured,
+  computeCowForwardPathDistance,
+  computeYangSkillProcFactorForMover,
+  cowForwardRowDelta,
+  decodeStage45PieceCodePart,
+  encodeStage45PieceSuffixes,
+  generateCowForwardChargedTargets,
+  isActorSkillProcSuppressedByAdjacentEnemyYin,
+  isCow,
+  isSen,
+  isZai,
+  maybeApplySenMoveSkillTransform,
+  resolveSenZaiFallbackVectors,
+} from '@/game/ported-app-stage45-pieces';
+import {
+  intrinsicCanJumpOverride,
+  intrinsicMoveVectorOverride,
+} from '@/game/shop-piece-move-vectors';
 import { grantRandomAllySpringImmunity } from '@/game/spring-random-ally-immunity';
 import {
   effectiveMovedSkillCode,
@@ -80,6 +99,7 @@ type InternalPiece = {
   mutantRevertCode?: string;
   pigInheritedCode?: string;
   pigInheritedPromoted?: boolean;
+  cowChargeCount?: number;
 };
 
 type InternalBoard = Map<string, InternalPiece>;
@@ -119,6 +139,7 @@ type AppliedStateResult =
       skillState: SkillState;
       skillTriggered: boolean;
       grantsConvexFollowup?: boolean;
+      grantsOtsuFollowup?: boolean;
     }
   | {
       ok: false;
@@ -231,7 +252,7 @@ export class BasicRuleEngine implements RuleEngine {
       return applied;
     }
 
-    const turnAdvanced = !applied.grantsConvexFollowup;
+    const turnAdvanced = !applied.grantsConvexFollowup && !applied.grantsOtsuFollowup;
     const nextTurn = turnAdvanced ? opposite(input.actorSide) : input.actorSide;
     const nextState: InternalGameState = {
       board: applied.board,
@@ -348,7 +369,26 @@ function applyLegalMove(
     skillState: next.skillState,
     skillTriggered: next.skillTriggered,
     grantsConvexFollowup: next.grantsConvexFollowup,
+    grantsOtsuFollowup: next.grantsOtsuFollowup,
   };
+}
+
+function activeFollowupCellForSide(
+  skillState: SkillState,
+  side: PlayerSide,
+  statusType: string,
+): Square | null {
+  for (const entry of skillState.piece_statuses) {
+    if (asString(entry.status_type ?? entry.statusType) !== statusType) continue;
+    if (asSide(entry.side) !== side) continue;
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (remaining <= 0) continue;
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    if (row === null || col === null) continue;
+    return { row, col };
+  }
+  return null;
 }
 
 function generateLegalMoves(
@@ -357,12 +397,32 @@ function generateLegalMoves(
   side: PlayerSide,
 ): NormalizedMove[] {
   const moves: NormalizedMove[] = [];
+  const convexFollowup = activeFollowupCellForSide(state.skillState, side, 'convex_followup');
+  const otsuFollowup = activeFollowupCellForSide(state.skillState, side, 'otsu_followup');
+  const lockedFollowup = convexFollowup ?? otsuFollowup;
+  const noCaptureOnly = otsuFollowup != null;
 
   for (const [square, piece] of state.board.entries()) {
     if (piece.side !== side) continue;
+    if (lockedFollowup) {
+      const source = parseSquare(square);
+      if (source.row !== lockedFollowup.row || source.col !== lockedFollowup.col) continue;
+    }
     if (isPieceImmobilized(state.skillState, state.board, rules, piece, square)) continue;
-    const pseudoMoves = generatePseudoMovesForPiece(state.board, state.skillState, rules, square, piece, state.moveCount);
+    const pseudoMoves = generatePseudoMovesForPiece(
+      state.board,
+      state.skillState,
+      rules,
+      square,
+      piece,
+      state.moveCount,
+      { noCaptureOnly },
+    );
     moves.push(...pseudoMoves);
+  }
+
+  if (lockedFollowup != null) {
+    return moves;
   }
 
   for (const drop of generateDropMoves(state, rules, side)) {
@@ -407,6 +467,7 @@ function generatePseudoMovesForPiece(
   from: string,
   piece: InternalPiece,
   moveCount: number,
+  options?: { noCaptureOnly?: boolean },
 ): NormalizedMove[] {
   const definition = resolveEffectivePieceDefinition(rules, board.values(), piece);
   if (!definition) return [];
@@ -437,7 +498,7 @@ function generatePseudoMovesForPiece(
         });
       },
     });
-    return targets.map((target) => ({
+    const giantMoves = targets.map((target) => ({
       from,
       to: formatSquare(target.row, target.col),
       piece: piece.code,
@@ -445,6 +506,7 @@ function generatePseudoMovesForPiece(
       drop: false,
       notation: GIANT_BOARD_MOVE_NOTATION,
     }));
+    return filterFollowupMoves(board, piece.side, giantMoves, options?.noCaptureOnly === true);
   }
 
   let targets = getMovementTargets(
@@ -485,7 +547,20 @@ function generatePseudoMovesForPiece(
     }
   }
 
-  return moves;
+  return filterFollowupMoves(board, piece.side, moves, options?.noCaptureOnly === true);
+}
+
+function filterFollowupMoves(
+  board: InternalBoard,
+  side: PlayerSide,
+  moves: NormalizedMove[],
+  noCaptureOnly: boolean,
+): NormalizedMove[] {
+  if (!noCaptureOnly) return moves;
+  return moves.filter((move) => {
+    const occupant = board.get(move.to);
+    return !occupant || occupant.side === side;
+  });
 }
 
 function generateDropMoves(
@@ -552,7 +627,13 @@ function getMovementTargets(
   moveCount: number,
   fromSquare: string,
 ) {
-  const internalPiece: InternalPiece = { side, code: pieceCode, promoted };
+  const sourcePiece = board.get(fromSquare) ?? { side, code: pieceCode, promoted };
+  const internalPiece: InternalPiece = {
+    ...sourcePiece,
+    side,
+    code: pieceCode,
+    promoted: promoted || sourcePiece.promoted,
+  };
   const pieceDef = resolveDef(rules, internalPiece);
   const pigOverlay = resolvePigInheritedPiece(internalPiece);
   const mover = pigOverlay ?? internalPiece;
@@ -589,7 +670,11 @@ function getMovementTargets(
     ? resolveBookMoveVectors(rules, skillState, side)
     : isConcave(mover, moverDef)
     ? resolveConcaveVectors()
-    : getMoveVectorsForPiece(moverDefinition, pigOverlay ? mover.promoted : promoted);
+    : resolveSenZaiFallbackVectors(
+        mover,
+        moverDef,
+        getMoveVectorsForPiece(moverDefinition, pigOverlay ? mover.promoted : promoted),
+      );
   vectors = adjustVectorsForMoon(vectors, mover, moverDef, moveCount + 1);
 
   if (isMachine(mover, moverDef)) {
@@ -643,6 +728,7 @@ function getMovementTargets(
     moverDefinition.canJump === true || intrinsicCanJumpOverride(moverDefinition);
 
   for (const vector of vectors) {
+    if (isCow(mover, moverDef) && vector.dx === 0 && vector.dy === -1) continue;
     if (isLeapOverOneMode(vector.captureMode)) {
       targets.push(...generateLeapOverOneTargets(board, skillState, side, source, vector));
       continue;
@@ -657,6 +743,20 @@ function getMovementTargets(
         vectorToPattern(vector, canJump),
         cloudMode,
       ),
+    );
+  }
+
+  if (isCow(mover, moverDef)) {
+    targets.push(
+      ...generateCowForwardChargedTargets({
+        board,
+        rules,
+        skillState,
+        piece: { ...internalPiece, code: mover.code },
+        from: source,
+        formatSquare,
+        isCellBlockedByHazard: (row, col) => isCellBlockedByHazard(skillState, row, col),
+      }),
     );
   }
 
@@ -947,12 +1047,15 @@ function applyMoveUnchecked(
   const hands = cloneHands(state.hands);
   const skillState = cloneSkillState(state.skillState);
   const boardBeforeMove = cloneBoard(state.board);
+  const otsuFollowupBefore = activeFollowupCellForSide(skillState, actorSide, 'otsu_followup');
+  const convexFollowupBefore = activeFollowupCellForSide(skillState, actorSide, 'convex_followup');
   let movedPiece: InternalPiece;
   let capturedPiece: InternalPiece | null = null;
   let phantomEvadedThisMove = false;
   let shieldAbortedMove = false;
   let ritualAbortedMove = false;
   let combatAbortedMove = false;
+  let stage45SkillTriggered = false;
   const fromSquare = move.drop ? null : move.from;
 
   if (move.drop) {
@@ -1010,12 +1113,61 @@ function applyMoveUnchecked(
         promoted: move.promote || current.promoted,
         pigInheritedCode: current.pigInheritedCode,
         pigInheritedPromoted: current.pigInheritedPromoted,
+        cowChargeCount: current.cowChargeCount,
       };
       capturedPiece = board.get(move.to) ?? null;
       const capturePos = parseSquare(move.to);
+      const fromPos = move.from ? parseSquare(move.from) : null;
+      const currentDef = resolveDef(rules, current);
+      let zaiCapturedEnemySnapshot: InternalPiece | null = null;
       if (!capturedPiece) {
         const occ = findOccupantAt(board, rules, capturePos.row, capturePos.col, formatSquare);
         if (occ && occ.piece.side !== actorSide) capturedPiece = occ.piece;
+      }
+      if (
+        capturedPiece &&
+        capturedPiece.side !== actorSide &&
+        isGiant(capturedPiece, resolveDef(rules, capturedPiece))
+      ) {
+        throw new Error('cannot capture giant');
+      }
+      if (
+        fromPos &&
+        isCow(current, currentDef)
+      ) {
+        const pathDist = computeCowForwardPathDistance(
+          actorSide,
+          fromPos.row,
+          fromPos.col,
+          capturePos.row,
+          capturePos.col,
+        );
+        if (pathDist != null && pathDist > 1) {
+          const d = cowForwardRowDelta(actorSide);
+          for (let s = 1; s < pathDist; s += 1) {
+            const row = fromPos.row + d * s;
+            const col = fromPos.col;
+            const midSquare = formatSquare(row, col);
+            let mid = board.get(midSquare);
+            if (!mid) {
+              const occ = findOccupantAt(board, rules, row, col, formatSquare);
+              mid = occ?.piece;
+            }
+            if (!mid || mid.side === actorSide) continue;
+            const midEntry = findOccupantAt(board, rules, row, col, formatSquare);
+            if (midEntry) board.delete(midEntry.square);
+            else board.delete(midSquare);
+            incrementHand(hands, actorSide, capturedPieceToHandCode(rules, mid));
+            capturedPiece = mid;
+          }
+        }
+      }
+      if (
+        capturedPiece &&
+        capturedPiece.side !== actorSide &&
+        isZai(current, currentDef)
+      ) {
+        zaiCapturedEnemySnapshot = { ...capturedPiece };
       }
       if (
         capturedPiece &&
@@ -1149,14 +1301,53 @@ function applyMoveUnchecked(
         };
       }
       if (!combatAbortedMove) {
+        const cowDef = resolveDef(rules, movedPiece);
+        if (fromPos && isCow(movedPiece, cowDef)) {
+          const pathDist = computeCowForwardPathDistance(
+            actorSide,
+            fromPos.row,
+            fromPos.col,
+            capturePos.row,
+            capturePos.col,
+          );
+          const isCowForwardMove = pathDist != null;
+          const isCowBackMove =
+            fromPos.col === capturePos.col &&
+            capturePos.row - fromPos.row === -cowForwardRowDelta(actorSide);
+          movedPiece = {
+            ...movedPiece,
+            cowChargeCount: isCowForwardMove
+              ? 0
+              : isCowBackMove
+                ? Math.min(8, Math.max(0, Math.floor(current.cowChargeCount ?? 0)) + 1)
+                : Math.max(0, Math.floor(current.cowChargeCount ?? 0)),
+          };
+        }
+        if (isSen(movedPiece, cowDef)) {
+          movedPiece = maybeApplySenMoveSkillTransform(movedPiece, rules);
+        }
         board.set(move.to, movedPiece);
         moveAttachedSkillState(skillState, actorSide, move.from ?? '', move.to);
+        if (
+          zaiCapturedEnemySnapshot &&
+          isZai(movedPiece, cowDef) &&
+          capturedPiece &&
+          applyZaiSkillReplaceAllySenWithCaptured({
+            board,
+            rules,
+            actorSide,
+            capturedEnemy: zaiCapturedEnemySnapshot,
+            zaiLandingSquare: move.to,
+          })
+        ) {
+          stage45SkillTriggered = true;
+        }
       }
     }
   }
 
   combatAbortedMove = shieldAbortedMove || ritualAbortedMove;
-  let skillTriggered = phantomEvadedThisMove || combatAbortedMove;
+  let skillTriggered = phantomEvadedThisMove || combatAbortedMove || stage45SkillTriggered;
   if (
     !combatAbortedMove &&
     !move.drop &&
@@ -1283,11 +1474,14 @@ function applyMoveUnchecked(
   applyDeathCurseExpirations({ board, skillState });
 
   let grantsConvexFollowup = false;
+  let grantsOtsuFollowup = false;
   if (
     allowSkills &&
     !combatAbortedMove &&
     !move.drop &&
     fromSquare &&
+    !otsuFollowupBefore &&
+    !convexFollowupBefore &&
     isConvex(movedPiece, resolveDef(rules, movedPiece))
   ) {
     const dest = parseSquare(move.to);
@@ -1313,6 +1507,38 @@ function applyMoveUnchecked(
     }
   }
 
+  if (
+    allowSkills &&
+    !combatAbortedMove &&
+    !move.drop &&
+    fromSquare &&
+    !otsuFollowupBefore &&
+    didCapture &&
+    isOtsu(movedPiece, resolveDef(rules, movedPiece))
+  ) {
+    const dest = parseSquare(move.to);
+    skillState.piece_statuses.push({
+      side: actorSide,
+      row: dest.row,
+      col: dest.col,
+      status_type: 'otsu_followup',
+      remaining_turns: 1,
+    });
+    const previewState: InternalGameState = {
+      board,
+      hands,
+      skillState,
+      turn: actorSide,
+      moveCount: state.moveCount,
+    };
+    grantsOtsuFollowup = generateLegalMoves(previewState, rules, actorSide).length > 0;
+    if (!grantsOtsuFollowup) {
+      skillState.piece_statuses = skillState.piece_statuses.filter(
+        (entry) => asString(entry.status_type ?? entry.statusType) !== 'otsu_followup',
+      );
+    }
+  }
+
   if (!combatAbortedMove && !move.drop && fromSquare) {
     recordLastMovedPieceForBook(
       skillState,
@@ -1329,6 +1555,7 @@ function applyMoveUnchecked(
     turn: opposite(actorSide),
     skillTriggered,
     grantsConvexFollowup,
+    grantsOtsuFollowup,
   };
 }
 
@@ -2094,21 +2321,22 @@ function removeChrysanthemumRevivalAtCell(
 
 function addChrysanthemumRevival(context: SkillContext) {
   const center = parseSquare(context.move.to);
-  const allies: string[] = [];
+  const allies: Array<{ square: string; row: number; col: number }> = [];
   forEachAdjacent(center, (row, col) => {
     const square = formatSquare(row, col);
     const piece = context.board.get(square);
-    if (piece?.side === context.actorSide && piece.code !== 'OU') allies.push(square);
+    if (!piece || piece.side !== context.actorSide) return;
+    if (piece.code === 'OU') return;
+    if (piece.code === 'GIANT' || piece.code.toUpperCase().includes('GIANT')) return;
+    allies.push({ square, row, col });
   });
-  allies.sort();
-  const targetSquare = allies[0];
-  const target = targetSquare ? context.board.get(targetSquare) : null;
-  if (!targetSquare || !target) return false;
-  const { row, col } = parseSquare(targetSquare);
+  allies.sort((a, b) => a.row - b.row || a.col - b.col);
+  const target = allies[0];
+  if (!target) return false;
   context.skillState.piece_statuses.push({
-    side: target.side,
-    row,
-    col,
+    side: context.actorSide,
+    row: target.row,
+    col: target.col,
     status_type: 'chrysanthemum_revival',
     remaining_turns: 2,
   });
@@ -2223,16 +2451,34 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
     pieceDef,
     normalizeSkillPieceCode(resolvedCode, pieceDef?.char),
   );
+  const yinSuppress = isActorSkillProcSuppressedByAdjacentEnemyYin(
+    context.board,
+    rules,
+    context.actorSide,
+    context.movedPiece,
+    context.move.to,
+  );
+  const yangFactor = computeYangSkillProcFactorForMover(
+    context.board,
+    rules,
+    context.actorSide,
+    context.movedPiece,
+    context.move.to,
+  );
+  const rollChance = (probability: number) => {
+    if (yinSuppress) return false;
+    return Math.random() <= Math.min(1, probability * yangFactor);
+  };
   if (!context.move.drop && context.fromSquare) {
     if (movedCode === 'FLAME' || movedCode === 'ENN') {
-      applied = chance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
+      applied = rollChance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
     }
     if (movedCode === 'FIRE' || movedCode === 'FIR') {
       applied =
-        chance(0.2) && decrementRandomHandPieces(context.hands, opposite(context.actorSide), 1) || applied;
+        rollChance(0.2) && decrementRandomHandPieces(context.hands, opposite(context.actorSide), 1) || applied;
     }
     if (movedCode === 'TREASURE') {
-      if (chance(0.2)) {
+      if (rollChance(0.2)) {
         incrementHand(context.hands, context.actorSide, pickRandom(TREASURE_REWARD_CODES) ?? 'KI');
         applied = true;
       }
@@ -2265,10 +2511,10 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = pushOrthogonalAdjacentEnemiesToEdge(context) || applied;
     }
     if (movedCode === 'FISH') {
-      applied = chance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 3) || applied;
+      applied = rollChance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 3) || applied;
     }
     if (movedCode === 'MOSS') {
-      applied = chance(0.3) && summonRandomAdjacentEmptyPiece(context, 'MOSS') || applied;
+      applied = rollChance(0.3) && summonRandomAdjacentEmptyPiece(context, 'MOSS') || applied;
     }
     if (movedCode === 'RAINBOW') {
       applied = applyAdjacentMovementModifier(context, 'orthogonal_step_only', 4) || applied;
@@ -2294,7 +2540,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = true;
     }
     if (movedCode === 'WATERFALL') {
-      applied = chance(0.2) && sendAllAdjacentEnemiesToOwnerHands(context) || applied;
+      applied = rollChance(0.2) && sendAllAdjacentEnemiesToOwnerHands(context) || applied;
     }
     if (movedCode === 'A') {
       applied = transformAdjacentEnemies(context, 'FU') || applied;
@@ -2303,7 +2549,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = transformAdjacentEnemiesToMutant(context) || applied;
     }
     if (movedCode === 'TIN') {
-      if (chance(0.1)) {
+      if (rollChance(0.1)) {
         applied = applyAdjacentEnemyStatus(context, 'stun', 2) || applied;
       }
     }
@@ -2320,35 +2566,35 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = applyOrthogonalAdjacentEnemyStatus(context, 'stun', 2) || applied;
     }
     if (movedCode === 'ELECTRIC') {
-      if (chance(0.2)) {
+      if (rollChance(0.2)) {
         applied = applyAdjacentEnemyStatus(context, 'stun', 2) || applied;
       }
     }
     if (movedCode === 'THUNDER') {
-      if (chance(0.1)) {
+      if (rollChance(0.1)) {
         applied = decrementRandomHandPieces(context.hands, opposite(context.actorSide), 2) || applied;
       }
     }
     if (movedCode === 'ICE') {
-      applied = chance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 2) || applied;
+      applied = rollChance(0.3) && applyRandomAdjacentEnemyStatus(context, 'stun', 2) || applied;
     }
     if (movedCode === 'SNOW') {
-      if (chance(0.2)) {
+      if (rollChance(0.2)) {
         incrementHand(context.hands, context.actorSide, 'ICE');
         applied = true;
       }
     }
     if (movedCode === 'WOOD' || movedCode === 'MOK') {
-      applied = chance(0.1) && summonRandomAdjacentEmptyPiece(context, 'MOK') || applied;
+      applied = rollChance(0.1) && summonRandomAdjacentEmptyPiece(context, 'MOK') || applied;
     }
     if (movedCode === 'LEAF' || movedCode === 'HAA') {
-      applied = chance(0.1) && summonRandomAdjacentEmptyPiece(context, 'HAA') || applied;
+      applied = rollChance(0.1) && summonRandomAdjacentEmptyPiece(context, 'HAA') || applied;
     }
     if (movedCode === 'TANE' || movedCode === 'SHOP_TANE') {
-      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'HAA') || applied;
+      applied = rollChance(0.2) && summonRandomAdjacentEmptyPiece(context, 'HAA') || applied;
     }
     if (movedCode === 'BULL') {
-      applied = chance(0.1) && summonOrthogonalAdjacentEmptyPieces(context, 'BULL') || applied;
+      applied = rollChance(0.1) && summonOrthogonalAdjacentEmptyPieces(context, 'BULL') || applied;
     }
     if (movedCode === 'BIGNOISE') {
       applied = warpHorizontalAdjacentEnemiesToRandomEmptyCell(context) || applied;
@@ -2361,10 +2607,10 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = addRandomOpponentCampPoisonCells(context, 3, 2) || applied;
     }
     if (movedCode === 'DEMON' || movedCode === 'MAK') {
-      applied = chance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 2) || applied;
+      applied = rollChance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 2) || applied;
     }
     if (movedCode === 'TATSU') {
-      applied = chance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 1) || applied;
+      applied = rollChance(0.1) && removeUpToRandomAdjacentEnemyPieces(context, 1) || applied;
     }
     if (movedCode === 'DARK' || movedCode === 'YAM') {
       applied = applyAdjacentEnemyStatus(context, 'dark_blind', 2) || applied;
@@ -2373,16 +2619,16 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = applyRandomEnemyStatus(context, 'prison_fence_stun', 2) || applied;
     }
     if (movedCode === 'RIDGE') {
-      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'YAMA') || applied;
+      applied = rollChance(0.2) && summonRandomAdjacentEmptyPiece(context, 'YAMA') || applied;
     }
     if (movedCode === 'KBOSS') {
-      applied = chance(0.4) && summonRandomAdjacentEmptyPiece(context, 'EXPERIMENT') || applied;
+      applied = rollChance(0.4) && summonRandomAdjacentEmptyPiece(context, 'EXPERIMENT') || applied;
     }
     if (movedCode === 'ORE') {
-      applied = chance(0.2) && transformRandomAllyPawn(context, pickRandom(TREASURE_REWARD_CODES) ?? 'KI') || applied;
+      applied = rollChance(0.2) && transformRandomAllyPawn(context, pickRandom(TREASURE_REWARD_CODES) ?? 'KI') || applied;
     }
     if (movedCode === 'GRAVE') {
-      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'SPIRIT') || applied;
+      applied = rollChance(0.2) && summonRandomAdjacentEmptyPiece(context, 'SPIRIT') || applied;
     }
     if (movedCode === 'ROCK') {
       applied = addHorizontalHazards(context, 'rock_obstacle', context.actorSide, 2) || applied;
@@ -2400,7 +2646,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = pushAdjacentPiecesOneStep(context) || applied;
     }
     if (movedCode === 'GACHA_SHITSU') {
-      applied = chance(0.3) && markKingSafeRoom(context, 2) || applied;
+      applied = rollChance(0.3) && markKingSafeRoom(context, 2) || applied;
     }
     if (movedCode === 'GACHA_SADAME') {
       context.skillState.piece_statuses.push({
@@ -2414,19 +2660,19 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = true;
     }
     if (movedCode === 'GACHA_AN') {
-      applied = chance(0.1) && transformRandomEnemySpecialToPawn(context) || applied;
+      applied = rollChance(0.1) && transformRandomEnemySpecialToPawn(context) || applied;
     }
     if (movedCode === 'GACHA_SO') {
-      applied = chance(0.2) && summonRandomAdjacentEmptyPiece(context, 'KI') || applied;
+      applied = rollChance(0.2) && summonRandomAdjacentEmptyPiece(context, 'KI') || applied;
     }
     if (movedCode === 'GACHA_TOU') {
-      applied = chance(0.2) && transformRandomAllyPawn(context, 'FIR') || applied;
+      applied = rollChance(0.2) && transformRandomAllyPawn(context, 'FIR') || applied;
     }
     if (movedCode === 'GACHA_HEN') {
       applied = imprisonRandomBoardEdge(context, 2) || applied;
     }
     if (movedCode === 'GACHA_ITSU') {
-      applied = chance(0.3) && sendRandomEnemyToOwnerHand(context) || applied;
+      applied = rollChance(0.3) && sendRandomEnemyToOwnerHand(context) || applied;
     }
     if (movedCode === 'GACHA_TOU2') {
       applied = moveKingSameVector(context) || applied;
@@ -3070,26 +3316,21 @@ function orientRowDelta(side: PlayerSide, delta: number) {
 
 function encodePiece(piece: InternalPiece) {
   const promoted = piece.promoted ? '+' : '';
-  const pigSuffix = encodePigInheritedSuffix(piece);
-  return `${piece.side}:${piece.code}${promoted}${pigSuffix}`;
+  const stage45Suffix = encodeStage45PieceSuffixes(piece);
+  return `${piece.side}:${piece.code}${promoted}${stage45Suffix}`;
 }
 
 function decodePiece(raw: string): InternalPiece | null {
   const [sideRaw, codeRaw] = raw.split(':');
   if ((sideRaw !== 'black' && sideRaw !== 'white') || !codeRaw) return null;
-  let codePart = codeRaw;
-  let promoted = false;
-  if (!codePart.includes('>') && codePart.endsWith('+')) {
-    promoted = true;
-    codePart = codePart.slice(0, -1);
-  }
-  const decoded = decodePigInheritedSuffix(codePart);
+  const decoded = decodeStage45PieceCodePart(codeRaw);
   return {
     side: sideRaw,
-    code: decoded.code.toUpperCase(),
-    promoted,
+    code: decoded.code,
+    promoted: decoded.promoted,
     pigInheritedCode: decoded.pigInheritedCode,
     pigInheritedPromoted: decoded.pigInheritedPromoted,
+    cowChargeCount: decoded.cowChargeCount,
   };
 }
 

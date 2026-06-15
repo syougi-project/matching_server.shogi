@@ -11,6 +11,7 @@ import {
   resolveDef,
   type PortedPiece,
 } from '@/game/ported-app-piece-code';
+import { isGiant } from '@/game/ported-app-remaining-pieces';
 
 type InternalBoard = Map<string, PortedPiece>;
 type Square = { row: number; col: number };
@@ -62,6 +63,7 @@ export function canCaptureTarget(input: {
   if (input.target.side === input.actorSide) return true;
   if (isArmor(input.mover, input.moverDef)) return false;
   if (isArmor(input.target, input.targetDef)) return false;
+  if (isGiant(input.target, input.targetDef)) return false;
   if (
     isKing(input.target, input.targetDef) &&
     hasSoulOnBoard(input.board, input.rules, input.target.side)

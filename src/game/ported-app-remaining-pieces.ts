@@ -74,6 +74,16 @@ export function isConvex(piece: PortedPiece, def: PieceDefinition | null): boole
   );
 }
 
+export function isOtsu(piece: PortedPiece, def: PieceDefinition | null): boolean {
+  const code = piece.code.toUpperCase();
+  return (
+    gameCode(piece, def) === 'OTSU' ||
+    def?.char === '乙' ||
+    code.includes('OTSU') ||
+    code.includes('5A07CA59B158')
+  );
+}
+
 export function isGiant(piece: PortedPiece, def: PieceDefinition | null): boolean {
   const code = piece.code.toUpperCase();
   return gameCode(piece, def) === 'GIANT' || def?.char === '巨' || code.includes('C4AEB81F3634');
