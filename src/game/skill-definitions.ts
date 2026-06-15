@@ -69,7 +69,7 @@ export const CANONICAL_SKILL_DEFINITIONS: readonly SkillDefinition[] = [
     ],
   },
 
-  // Skill #72: 獣 (Beast) - stun adjacent enemies on move
+  // Skill #72: 獣 (Beast) - stun orthogonal adjacent enemies on move (2 turns)
   {
     skillId: 72,
     pieceChars: ['獣'],

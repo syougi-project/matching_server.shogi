@@ -246,6 +246,15 @@ export function applyZaiSkillReplaceAllySenWithCaptured(input: {
   return true;
 }
 
+export const YANG_ALLY_SKILL_PROC_FACTOR = 1.3;
+
+export function applyYangAllySkillProcMultiplier(baseChance: number, yangFactor: number): number {
+  if (yangFactor <= 1) return baseChance;
+  if (!Number.isFinite(baseChance) || baseChance <= 0) return baseChance;
+  if (baseChance >= 1) return baseChance;
+  return Math.min(1, baseChance * yangFactor);
+}
+
 export function computeYangSkillProcFactorForMover(
   board: RemainingBoard,
   rules: RuleSnapshot,
@@ -263,7 +272,7 @@ export function computeYangSkillProcFactorForMover(
     const yangPos = parseSquareKey(square);
     const dr = Math.abs(yangPos.row - moverPos.row);
     const dc = Math.abs(yangPos.col - moverPos.col);
-    if (dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0)) return 1.3;
+    if (dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0)) return YANG_ALLY_SKILL_PROC_FACTOR;
   }
   return 1;
 }

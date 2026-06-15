@@ -6,6 +6,7 @@ import {
   isDisease,
   isHeart,
   isHole,
+  isHolySword,
   isKatana,
   isKing,
   isOboro,
@@ -66,6 +67,29 @@ export function tryShieldIntrinsicAbortHostileCapture(input: {
   }
   if (!hasQualifyingShield) return false;
   return Math.random() < SHIELD_ABORT_PROC_CHANCE;
+}
+
+/** 剣: 同一段の左右（筋±1）に空きがあれば捕獲を回避して移動する。 */
+export function tryHolySwordEvadeCapture(input: {
+  board: InternalBoard;
+  rules: RuleSnapshot;
+  capturedPiece: PortedPiece;
+  captureSquare: string;
+  formatSquare: (row: number, col: number) => string;
+  parseSquare: (square: string) => Square;
+}): string | null {
+  const def = resolveDef(input.rules, input.capturedPiece);
+  if (!isHolySword(input.capturedPiece, def)) return null;
+  const { row, col } = input.parseSquare(input.captureSquare);
+  const candidates: string[] = [];
+  for (const dc of [-1, 1]) {
+    const nextCol = col + dc;
+    if (nextCol < 0 || nextCol > 8) continue;
+    const square = input.formatSquare(row, nextCol);
+    if (!input.board.has(square)) candidates.push(square);
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
 }
 
 export function tryOboroEvadeCapture(input: {

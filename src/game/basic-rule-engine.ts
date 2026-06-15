@@ -12,6 +12,7 @@ import {
   consumeRitualSubstitute,
   moveGearFollowLeader,
   shouldRitualSubstitute,
+  tryHolySwordEvadeCapture,
   tryOboroEvadeCapture,
   tryShieldIntrinsicAbortHostileCapture,
 } from '@/game/ported-app-capture-effects';
@@ -60,6 +61,7 @@ import {
 } from '@/game/ported-app-remaining-pieces';
 import {
   applyZaiSkillReplaceAllySenWithCaptured,
+  applyYangAllySkillProcMultiplier,
   computeCowForwardPathDistance,
   computeYangSkillProcFactorForMover,
   cowForwardRowDelta,
@@ -1229,21 +1231,34 @@ function applyMoveUnchecked(
         }
       }
       if (!combatAbortedMove && capturedPiece && capturedPiece.code !== 'OU') {
-        const oboroEvade = tryOboroEvadeCapture({
+        const holySwordEvade = tryHolySwordEvadeCapture({
           board,
           rules,
           capturedPiece,
           captureSquare: move.to,
           formatSquare,
           parseSquare,
-          isInsideBoard,
         });
-        if (oboroEvade) {
-          board.set(oboroEvade, capturedPiece);
-          moveAttachedSkillState(skillState, capturedPiece.side, move.to, oboroEvade);
+        if (holySwordEvade) {
+          board.set(holySwordEvade, capturedPiece);
+          moveAttachedSkillState(skillState, capturedPiece.side, move.to, holySwordEvade);
           capturedPiece = null;
         } else {
-          const evadeSquare = tryPhantomEvadeCapture(board, rules, skillState, capturedPiece, capturePos);
+          const oboroEvade = tryOboroEvadeCapture({
+            board,
+            rules,
+            capturedPiece,
+            captureSquare: move.to,
+            formatSquare,
+            parseSquare,
+            isInsideBoard,
+          });
+          if (oboroEvade) {
+            board.set(oboroEvade, capturedPiece);
+            moveAttachedSkillState(skillState, capturedPiece.side, move.to, oboroEvade);
+            capturedPiece = null;
+          } else {
+            const evadeSquare = tryPhantomEvadeCapture(board, rules, skillState, capturedPiece, capturePos);
           if (evadeSquare) {
             board.set(evadeSquare, capturedPiece);
             moveAttachedSkillState(skillState, capturedPiece.side, move.to, evadeSquare);
@@ -1284,6 +1299,7 @@ function applyMoveUnchecked(
             });
           }
         }
+        }
         const occEntry = findOccupantAt(
           board,
           rules,
@@ -1293,10 +1309,15 @@ function applyMoveUnchecked(
         );
         if (occEntry) board.delete(occEntry.square);
       }
-      if (!combatAbortedMove && capturedPiece && isPig(movedPiece, resolveDef(rules, movedPiece))) {
+      if (
+        !combatAbortedMove &&
+        capturedPiece &&
+        capturedPiece.side !== actorSide &&
+        isPig(movedPiece, resolveDef(rules, movedPiece))
+      ) {
         movedPiece = {
           ...movedPiece,
-          pigInheritedCode: capturedPiece.code,
+          pigInheritedCode: capturedPieceToHandCode(rules, capturedPiece),
           pigInheritedPromoted: capturedPiece.promoted,
         };
       }
@@ -1976,18 +1997,19 @@ function moveAllyBehindBoatOneStep(context: SkillContext) {
 }
 
 function moveRandomAllyToCellBehindBird(context: SkillContext) {
-  if (!context.fromSquare) return false;
-  const from = parseSquare(context.fromSquare);
   const to = parseSquare(context.move.to);
-  const deltaRow = to.row - from.row;
-  const deltaCol = to.col - from.col;
-  const behindRow = to.row - Math.sign(deltaRow);
-  const behindCol = to.col - Math.sign(deltaCol);
+  const dBack = context.actorSide === 'black' ? 1 : -1;
+  const behindRow = to.row + dBack;
+  const behindCol = to.col;
   if (!isInsideBoard(behindRow, behindCol)) return false;
   const dest = formatSquare(behindRow, behindCol);
   if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, behindRow, behindCol)) return false;
-  const candidates = Array.from(context.board.entries()).filter(([, piece]) => {
-    return piece.side === context.actorSide && piece.code !== 'OU' && piece.code !== context.movedPiece.code;
+  const candidates = Array.from(context.board.entries()).filter(([square, piece]) => {
+    if (square === context.move.to) return false;
+    if (piece.side !== context.actorSide) return false;
+    if (piece.code === 'OU') return false;
+    if (piece.code === 'BIRD' || piece.code.toUpperCase().includes('29ECAB1EF3C3')) return false;
+    return true;
   });
   const selected = pickRandom(candidates);
   if (!selected) return false;
@@ -2467,9 +2489,12 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
   );
   const rollChance = (probability: number) => {
     if (yinSuppress) return false;
-    return Math.random() <= Math.min(1, probability * yangFactor);
+    return Math.random() <= applyYangAllySkillProcMultiplier(probability, yangFactor);
   };
   if (!context.move.drop && context.fromSquare) {
+    if (yinSuppress) {
+      return applied;
+    }
     if (movedCode === 'FLAME' || movedCode === 'ENN') {
       applied = rollChance(0.2) && removeRandomAdjacentEnemyPiece(context) || applied;
     }

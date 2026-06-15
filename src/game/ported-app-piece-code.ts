@@ -72,6 +72,12 @@ export function isKatana(piece: PortedPiece, def: PieceDefinition | null): boole
   return gameCode(piece, def) === 'KATANA' || char === '刀';
 }
 
+export function isHolySword(piece: PortedPiece, def: PieceDefinition | null): boolean {
+  const code = piece.code.toUpperCase();
+  if (def?.char === '剣') return true;
+  return gameCode(piece, def) === 'HOLY_SWORD' || code.includes('0F14ABCC6E5E');
+}
+
 export function isGun(piece: PortedPiece, def: PieceDefinition | null): boolean {
   return gameCode(piece, def) === 'GUN' || def?.char === '銃';
 }
