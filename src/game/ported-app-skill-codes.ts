@@ -31,6 +31,7 @@ export const PORTED_APP_SKILL_CODES = [
   'MIST',
   'PHANTOM',
   'HOUSE',
+  'FIELD',
   'PEOPLE',
   'MIRROR',
   'MOON',

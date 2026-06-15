@@ -75,6 +75,7 @@ describe('stage13+ online skill parity', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+    expect(result.nextGame.lastSkillTriggered).toBe(true);
     expect(result.nextGame.handsState.black.PHANTOM).toBeUndefined();
     expect(result.nextGame.boardState['4e']).toBe('black:GI');
     const phantomSquare = Object.entries(result.nextGame.boardState).find(([, value]) =>

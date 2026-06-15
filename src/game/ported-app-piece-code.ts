@@ -61,6 +61,11 @@ export function isRitual(piece: PortedPiece, def: PieceDefinition | null): boole
   return gameCode(piece, def) === 'RITUAL' || def?.char === '礼' || code.includes('4FCDDF14D08D');
 }
 
+export function isShield(piece: PortedPiece, def: PieceDefinition | null): boolean {
+  const code = piece.code.toUpperCase();
+  return gameCode(piece, def) === 'SHIELD' || def?.char === '盾' || code === 'SHIELD';
+}
+
 export function isKatana(piece: PortedPiece, def: PieceDefinition | null): boolean {
   const char = def?.char ?? '';
   if (char === '剣') return false;

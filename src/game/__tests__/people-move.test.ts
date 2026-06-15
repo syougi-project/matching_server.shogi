@@ -5,15 +5,14 @@ import type { GameSnapshot, PieceDefinition, RuleSnapshot } from '@/types/domain
 
 const engine = new BasicRuleEngine();
 
-describe('remaining stage pieces parity', () => {
-  test('machine borrows left ally move vectors', () => {
-    const rules = createRules(['MACHINE', 'FU', 'OU']);
+describe('people piece online moves', () => {
+  test('people can move orthogonally one step', () => {
+    const rules = createRules(['PEOPLE', 'OU']);
     const game: GameSnapshot = {
       boardState: {
         '5i': 'black:OU',
         '5a': 'white:OU',
-        '5e': 'black:MACHINE',
-        '4e': 'black:FU',
+        '5e': 'black:PEOPLE',
       },
       handsState: { black: {}, white: {} },
       skillState: emptySkillState(),
@@ -25,20 +24,19 @@ describe('remaining stage pieces parity', () => {
       actorSide: 'black',
       rules,
       game,
-      move: { from: '5e', to: '5d', piece: 'MACHINE' },
+      move: { from: '5e', to: '5d', piece: 'PEOPLE' },
     });
     expect(result.ok).toBe(true);
   });
 
-  test('yang with ally yin on same row cannot be captured', () => {
-    const rules = createRules(['YANG', 'YIN', 'FU', 'OU']);
+  test('people gain diagonal moves when ally field is on board', () => {
+    const rules = createRules(['PEOPLE', 'FIELD', 'OU']);
     const game: GameSnapshot = {
       boardState: {
         '5i': 'black:OU',
         '5a': 'white:OU',
-        '5e': 'white:YANG',
-        '3e': 'white:YIN',
-        '4f': 'black:FU',
+        '5e': 'black:PEOPLE',
+        '1a': 'black:FIELD',
       },
       handsState: { black: {}, white: {} },
       skillState: emptySkillState(),
@@ -50,19 +48,57 @@ describe('remaining stage pieces parity', () => {
       actorSide: 'black',
       rules,
       game,
-      move: { from: '4f', to: '5e', piece: 'FU' },
+      move: { from: '5e', to: '4d', piece: 'PEOPLE' },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test('field piece cannot move', () => {
+    const rules = createRules(['FIELD', 'OU']);
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:FIELD',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '5d', piece: 'FIELD' },
     });
     expect(result.ok).toBe(false);
   });
 
-  test('pig inherits captured piece movement code', () => {
-    const rules = createRules(['PIG', 'FU', 'OU']);
+  test('field piece with ZTA code and knight catalog vectors cannot move', () => {
+    const rules = createRules(['OU']);
+    rules.piecesByCode.ZTA = {
+      pieceCode: 'ZTA',
+      canonicalCode: 'FIELD',
+      sfenCode: 'ZTA',
+      char: '畑',
+      name: '畑',
+      skill: '',
+      moveVectors: [
+        { dx: -1, dy: -2, maxStep: 1 },
+        { dx: 1, dy: -2, maxStep: 1 },
+      ],
+      moveRules: [],
+      moveConstraints: null,
+      promotable: false,
+      skillDefinitionsV2: null,
+    };
     const game: GameSnapshot = {
       boardState: {
         '5i': 'black:OU',
         '5a': 'white:OU',
-        '5e': 'black:PIG',
-        '5d': 'white:FU',
+        '5e': 'black:ZTA',
       },
       handsState: { black: {}, white: {} },
       skillState: emptySkillState(),
@@ -74,34 +110,9 @@ describe('remaining stage pieces parity', () => {
       actorSide: 'black',
       rules,
       game,
-      move: { from: '5e', to: '5d', piece: 'PIG' },
+      move: { from: '5e', to: '3d', piece: 'ZTA' },
     });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.nextGame.boardState['5d']).toContain('>FU');
-  });
-
-  test('book uses orthogonal fallback when no enemy move was recorded', () => {
-    const rules = createRules(['BOOK', 'FU', 'OU']);
-    const game: GameSnapshot = {
-      boardState: {
-        '5i': 'black:OU',
-        '5a': 'white:OU',
-        '5e': 'black:BOOK',
-      },
-      handsState: { black: {}, white: {} },
-      skillState: emptySkillState(),
-      turn: 'black',
-      moveCount: 0,
-      version: 1,
-    };
-    const result = engine.applyMove({
-      actorSide: 'black',
-      rules,
-      game,
-      move: { from: '5e', to: '5d', piece: 'BOOK' },
-    });
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -117,7 +128,7 @@ function emptySkillState(): GameSnapshot['skillState'] {
 
 function createRules(codes: string[]): RuleSnapshot {
   const piecesByCode: Record<string, PieceDefinition> = {};
-  for (const code of ['FU', 'GI', 'KI', 'OU', ...codes]) {
+  for (const code of ['FU', 'OU', ...codes]) {
     piecesByCode[code] = createPiece(code);
   }
   return {
@@ -130,30 +141,12 @@ function createRules(codes: string[]): RuleSnapshot {
 
 function createPiece(code: string): PieceDefinition {
   const charByCode: Record<string, string> = {
-    MACHINE: '機',
-    YANG: '陽',
-    YIN: '陰',
-    PIG: '豚',
-    BOOK: '書',
-    FU: '歩',
+    PEOPLE: '民',
+    FIELD: '畑',
+    HOUSE: '家',
     OU: '王',
+    FU: '歩',
   };
-  const kingLike = [
-    { dx: -1, dy: -1, maxStep: 1 },
-    { dx: 0, dy: -1, maxStep: 1 },
-    { dx: 1, dy: -1, maxStep: 1 },
-    { dx: -1, dy: 0, maxStep: 1 },
-    { dx: 1, dy: 0, maxStep: 1 },
-    { dx: -1, dy: 1, maxStep: 1 },
-    { dx: 0, dy: 1, maxStep: 1 },
-    { dx: 1, dy: 1, maxStep: 1 },
-  ];
-  const vectors =
-    code === 'FU'
-      ? [{ dx: 0, dy: -1, maxStep: 1 }]
-      : code === 'MACHINE' || code === 'BOOK' || code === 'PIG'
-        ? [{ dx: 0, dy: -1, maxStep: 1 }]
-        : kingLike;
   return {
     pieceCode: code,
     canonicalCode: code,
@@ -161,7 +154,7 @@ function createPiece(code: string): PieceDefinition {
     char: charByCode[code] ?? code,
     name: code,
     skill: '',
-    moveVectors: vectors,
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     moveRules: [],
     moveConstraints: null,
     promotable: false,

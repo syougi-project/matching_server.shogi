@@ -37,6 +37,7 @@ describe('ported app.shogi skill coverage', () => {
         'MIST',
         'PHANTOM',
         'HOUSE',
+        'FIELD',
         'PEOPLE',
         'MIRROR',
         'MOON',

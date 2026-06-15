@@ -236,6 +236,25 @@ export function hasOrthogonalAdjacentAllySaint(
   return false;
 }
 
+/** 聖の周囲8マスにいる駒は移動・スキル不可（HTML isNearSaintGlobal 準拠）。 */
+export function isCellAdjacentToAnySaint(
+  board: RemainingBoard,
+  rules: RuleSnapshot,
+  row: number,
+  col: number,
+  formatSquare: (row: number, col: number) => string,
+): boolean {
+  for (const [square, piece] of board.entries()) {
+    if (!isSaint(piece, resolveDef(rules, piece))) continue;
+    const saintPos = parseSquareFromKey(square);
+    if (Math.abs(saintPos.row - row) <= 1 && Math.abs(saintPos.col - col) <= 1) {
+      if (saintPos.row === row && saintPos.col === col) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
 export function hasAdjacentAllyMedicine(
   board: RemainingBoard,
   rules: RuleSnapshot,
@@ -556,6 +575,36 @@ export function applyAuraVectorBuffs(input: {
     vectors = applyCherryRowMoveRangeBuff(vectors);
   }
   return vectors;
+}
+
+/** 鏡・映: 正面に敵がいないときの縦横1マス（HTML mirrorMoves / reflectionMoves）。 */
+export const MIRROR_ORTHOGONAL_MOVE_VECTORS: MoveVector[] = [
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+];
+
+/** 正面列を1マスずつ進み、最初に当たった駒が敵ならそれを返す（味方で止まったら null）。 */
+export function findFrontFacingEnemy(
+  board: RemainingBoard,
+  rules: RuleSnapshot,
+  actorSide: PlayerSide,
+  source: RemainingSquare,
+  formatSquare: (row: number, col: number) => string,
+  orientRowDelta: (side: PlayerSide, delta: number) => number,
+): { square: string; piece: PortedPiece } | null {
+  const forwardStep = orientRowDelta(actorSide, -1);
+  for (let i = 1; i < 9; i += 1) {
+    const row = source.row + forwardStep * i;
+    const col = source.col;
+    if (row < 0 || row > 8) break;
+    const occ = findOccupantAt(board, rules, row, col, formatSquare);
+    if (!occ) continue;
+    if (occ.piece.side !== actorSide) return occ;
+    return null;
+  }
+  return null;
 }
 
 export function mirrorEnemyCandidates(

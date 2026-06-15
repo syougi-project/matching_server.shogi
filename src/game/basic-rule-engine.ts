@@ -13,9 +13,12 @@ import {
   moveGearFollowLeader,
   shouldRitualSubstitute,
   tryOboroEvadeCapture,
+  tryShieldIntrinsicAbortHostileCapture,
 } from '@/game/ported-app-capture-effects';
 import { isArmor, isGun, isKatana, resolveDef } from '@/game/ported-app-piece-code';
+import { resolveBookMoveVectors, recordLastMovedPieceForBook } from '@/game/ported-app-book-moves';
 import {
+  applyGunPenetrationMidCapture,
   adjustVectorsForMoon,
   canCaptureTarget as canCaptureTargetSpecial,
   filterKatanaTargets,
@@ -23,16 +26,23 @@ import {
   generateSatoriHeartNotationMoves,
 } from '@/game/ported-app-stage19-moves';
 import {
+  adjustVectorsForHouseFieldPeople,
+  isFixedHouseOrFieldPiece,
+  peopleFieldBuffActive,
+} from '@/game/ported-app-house-field-people';
+import {
   GIANT_BOARD_MOVE_NOTATION,
   applyAuraVectorBuffs,
   decodePigInheritedSuffix,
   encodePigInheritedSuffix,
+  findFrontFacingEnemy,
   findOccupantAt,
   generateConcaveEdgePierceTargets,
   generateGiantOrthogonalTargets,
   generateReflectiveTargets,
   isBook,
   isBondProtectedFromCapture,
+  isCellAdjacentToAnySaint,
   isConcave,
   isConvex,
   isGiant,
@@ -41,14 +51,13 @@ import {
   isMirror,
   isPig,
   listAdjacentAllies,
-  mirrorEnemyCandidates,
+  MIRROR_ORTHOGONAL_MOVE_VECTORS,
   pickMachineDonorAlly,
   resolveConcaveVectors,
   resolvePigInheritedPiece,
-  selectMirrorTarget,
   giantAnchorFootprint,
 } from '@/game/ported-app-remaining-pieces';
-import { intrinsicMoveVectorOverride } from '@/game/shop-piece-move-vectors';
+import { intrinsicCanJumpOverride, intrinsicMoveVectorOverride } from '@/game/shop-piece-move-vectors';
 import { grantRandomAllySpringImmunity } from '@/game/spring-random-ally-immunity';
 import {
   effectiveMovedSkillCode,
@@ -351,7 +360,7 @@ function generateLegalMoves(
 
   for (const [square, piece] of state.board.entries()) {
     if (piece.side !== side) continue;
-    if (isPieceImmobilized(state.skillState, piece, square)) continue;
+    if (isPieceImmobilized(state.skillState, state.board, rules, piece, square)) continue;
     const pseudoMoves = generatePseudoMovesForPiece(state.board, state.skillState, rules, square, piece, state.moveCount);
     moves.push(...pseudoMoves);
   }
@@ -402,43 +411,9 @@ function generatePseudoMovesForPiece(
   const definition = resolveEffectivePieceDefinition(rules, board.values(), piece);
   if (!definition) return [];
   const source = parseSquare(from);
-  const pieceDef = resolveDef(rules, piece);
-
-  if (isBook(piece, pieceDef)) {
-    const allies = listAdjacentAllies(board, rules, from, piece, formatSquare);
-    const targetKeys = new Set<string>();
-    const targets: Square[] = [];
-    for (const ally of allies) {
-      if (isBook(ally.piece, resolveDef(rules, ally.piece))) continue;
-      const allyMoves = generatePseudoMovesForPiece(
-        board,
-        skillState,
-        rules,
-        ally.square,
-        board.get(ally.square) ?? ally.piece,
-        moveCount,
-      );
-      for (const mv of allyMoves) {
-        const dest = parseSquare(mv.to);
-        const key = `${dest.row}:${dest.col}`;
-        if (targetKeys.has(key)) continue;
-        targetKeys.add(key);
-        targets.push(dest);
-      }
-    }
-    const moves: NormalizedMove[] = [];
-    for (const target of targets) {
-      const to = formatSquare(target.row, target.col);
-      moves.push({
-        from,
-        to,
-        piece: piece.code,
-        promote: false,
-        drop: false,
-        notation: null,
-      });
-    }
-    return moves;
+  const pieceDef = resolvePieceDefinition(rules, piece);
+  if (isFixedHouseOrFieldPiece(piece, pieceDef)) {
+    return [];
   }
 
   if (isGiant(piece, pieceDef)) {
@@ -605,14 +580,17 @@ function getMovementTargets(
       source,
       definition.pieceCode,
       board,
+      rules,
     );
   }
 
   const targets: Square[] = [];
-  let vectors = isConcave(mover, moverDef)
+  let vectors = isBook(mover, moverDef)
+    ? resolveBookMoveVectors(rules, skillState, side)
+    : isConcave(mover, moverDef)
     ? resolveConcaveVectors()
     : getMoveVectorsForPiece(moverDefinition, pigOverlay ? mover.promoted : promoted);
-  vectors = adjustVectorsForMoon(vectors, mover, moverDef, moveCount);
+  vectors = adjustVectorsForMoon(vectors, mover, moverDef, moveCount + 1);
 
   if (isMachine(mover, moverDef)) {
     const donor = pickMachineDonorAlly(board, rules, fromSquare, mover, formatSquare);
@@ -625,22 +603,21 @@ function getMovementTargets(
   }
 
   if (isMirror(mover, moverDef)) {
-    const candidates = mirrorEnemyCandidates(board, rules, side);
-    const selected = selectMirrorTarget(
-      moveCount,
-      { ...source, side },
-      candidates.map((c) => ({ ...c.pos, side: c.piece.side })),
+    const frontEnemy = findFrontFacingEnemy(
+      board,
+      rules,
+      side,
+      source,
+      formatSquare,
+      orientRowDelta,
     );
-    if (selected) {
-      const match = candidates.find(
-        (c) => c.pos.row === selected.row && c.pos.col === selected.col,
-      );
-      if (match) {
-        const selectedDef = resolveDef(rules, match.piece);
-        if (selectedDef && selectedDef.moveVectors.length > 0) {
-          vectors = selectedDef.moveVectors.map((v) => ({ ...v }));
-        }
+    if (frontEnemy) {
+      const selectedDef = resolveDef(rules, frontEnemy.piece);
+      if (selectedDef && selectedDef.moveVectors.length > 0) {
+        vectors = selectedDef.moveVectors.map((v) => ({ ...v }));
       }
+    } else {
+      vectors = MIRROR_ORTHOGONAL_MOVE_VECTORS.map((v) => ({ ...v }));
     }
   }
 
@@ -652,8 +629,18 @@ function getMovementTargets(
     vectors,
     formatSquare,
   });
+  vectors = adjustVectorsForHouseFieldPeople({
+    vectors,
+    board,
+    rules,
+    piece: mover,
+    def: moverDef,
+    actorSide: side,
+  });
 
   const cloudMode = isCloudMover(moverDefinition);
+  const canJump =
+    moverDefinition.canJump === true || intrinsicCanJumpOverride(moverDefinition);
 
   for (const vector of vectors) {
     if (isLeapOverOneMode(vector.captureMode)) {
@@ -667,7 +654,7 @@ function getMovementTargets(
         rules,
         side,
         source,
-        vectorToPattern(vector, moverDefinition.canJump === true),
+        vectorToPattern(vector, canJump),
         cloudMode,
       ),
     );
@@ -712,6 +699,7 @@ function getMovementTargets(
     source,
     definition.pieceCode,
     board,
+    rules,
   );
 }
 
@@ -961,6 +949,10 @@ function applyMoveUnchecked(
   const boardBeforeMove = cloneBoard(state.board);
   let movedPiece: InternalPiece;
   let capturedPiece: InternalPiece | null = null;
+  let phantomEvadedThisMove = false;
+  let shieldAbortedMove = false;
+  let ritualAbortedMove = false;
+  let combatAbortedMove = false;
   const fromSquare = move.drop ? null : move.from;
 
   if (move.drop) {
@@ -1020,14 +1012,71 @@ function applyMoveUnchecked(
         pigInheritedPromoted: current.pigInheritedPromoted,
       };
       capturedPiece = board.get(move.to) ?? null;
+      const capturePos = parseSquare(move.to);
       if (!capturedPiece) {
-        const capturePos = parseSquare(move.to);
         const occ = findOccupantAt(board, rules, capturePos.row, capturePos.col, formatSquare);
         if (occ && occ.piece.side !== actorSide) capturedPiece = occ.piece;
       }
-      board.delete(move.from ?? '');
-      if (capturedPiece && capturedPiece.code !== 'OU') {
-        const capturePos = parseSquare(move.to);
+      if (
+        capturedPiece &&
+        capturedPiece.side !== actorSide &&
+        capturedPiece.code !== 'OU' &&
+        shouldRitualSubstitute({
+          board,
+          rules,
+          capturedPiece,
+          captureSquare: move.to,
+        })
+      ) {
+        ritualAbortedMove = true;
+        consumeRitualSubstitute({
+          board,
+          rules,
+          defenderSide: capturedPiece.side,
+          excludeSquare: move.to,
+        });
+        capturedPiece = null;
+      } else if (
+        capturedPiece &&
+        capturedPiece.side !== actorSide &&
+        capturedPiece.code !== 'OU' &&
+        tryShieldIntrinsicAbortHostileCapture({
+          actorSide,
+          victim: capturedPiece,
+          victimRow: capturePos.row,
+          victimCol: capturePos.col,
+          board,
+          rules,
+          parseSquare,
+        })
+      ) {
+        shieldAbortedMove = true;
+        capturedPiece = null;
+      }
+      combatAbortedMove = shieldAbortedMove || ritualAbortedMove;
+      if (!combatAbortedMove) {
+        board.delete(move.from ?? '');
+        if (
+          fromSquare &&
+          isGun(movedPiece, resolveDef(rules, movedPiece)) &&
+          applyGunPenetrationMidCapture({
+            board,
+            rules,
+            hands,
+            actorSide,
+            movedPiece,
+            fromSquare,
+            toSquare: move.to,
+            formatSquare,
+            parseSquare,
+            capturedToHandCode: (piece) => capturedPieceToHandCode(rules, piece),
+            incrementHand: (side, code) => incrementHand(hands, side, code),
+          })
+        ) {
+          phantomEvadedThisMove = true;
+        }
+      }
+      if (!combatAbortedMove && capturedPiece && capturedPiece.code !== 'OU') {
         const oboroEvade = tryOboroEvadeCapture({
           board,
           rules,
@@ -1047,6 +1096,7 @@ function applyMoveUnchecked(
             board.set(evadeSquare, capturedPiece);
             moveAttachedSkillState(skillState, capturedPiece.side, move.to, evadeSquare);
             capturedPiece = null;
+            phantomEvadedThisMove = true;
           } else if (
             hasChrysanthemumRevival(
               skillState,
@@ -1063,25 +1113,11 @@ function applyMoveUnchecked(
             );
             incrementHand(hands, capturedPiece.side, capturedPieceToHandCode(rules, capturedPiece));
           } else {
-            const ritualSub = shouldRitualSubstitute({
-              board,
-              rules,
-              capturedPiece,
-              captureSquare: move.to,
-            });
             incrementHand(
               hands,
-              ritualSub ? capturedPiece.side : actorSide,
+              actorSide,
               capturedPieceToHandCode(rules, capturedPiece),
             );
-            if (ritualSub) {
-              consumeRitualSubstitute({
-                board,
-                rules,
-                defenderSide: capturedPiece.side,
-                excludeSquare: move.to,
-              });
-            }
             applyCapturedVictimEffects({
               board,
               rules,
@@ -1105,20 +1141,24 @@ function applyMoveUnchecked(
         );
         if (occEntry) board.delete(occEntry.square);
       }
-      if (capturedPiece && isPig(movedPiece, resolveDef(rules, movedPiece))) {
+      if (!combatAbortedMove && capturedPiece && isPig(movedPiece, resolveDef(rules, movedPiece))) {
         movedPiece = {
           ...movedPiece,
           pigInheritedCode: capturedPiece.code,
           pigInheritedPromoted: capturedPiece.promoted,
         };
       }
-      board.set(move.to, movedPiece);
-      moveAttachedSkillState(skillState, actorSide, move.from ?? '', move.to);
+      if (!combatAbortedMove) {
+        board.set(move.to, movedPiece);
+        moveAttachedSkillState(skillState, actorSide, move.from ?? '', move.to);
+      }
     }
   }
 
-  let skillTriggered = false;
+  combatAbortedMove = shieldAbortedMove || ritualAbortedMove;
+  let skillTriggered = phantomEvadedThisMove || combatAbortedMove;
   if (
+    !combatAbortedMove &&
     !move.drop &&
     capturedPiece &&
     capturedPiece.code !== 'OU' &&
@@ -1137,7 +1177,7 @@ function applyMoveUnchecked(
   ) {
     skillTriggered = true;
   }
-  if (allowSkills) {
+  if (!combatAbortedMove && allowSkills) {
     const applied = applySkills(rules, {
       board,
       hands,
@@ -1153,6 +1193,7 @@ function applyMoveUnchecked(
 
   const didCapture = Boolean(capturedPiece);
   if (
+    !combatAbortedMove &&
     !move.drop &&
     didCapture &&
     applyKatanaSideCaptures({
@@ -1174,6 +1215,7 @@ function applyMoveUnchecked(
     skillTriggered = true;
   }
   if (
+    !combatAbortedMove &&
     !move.drop &&
     didCapture &&
     applyCookingCaptureSummon({
@@ -1190,6 +1232,7 @@ function applyMoveUnchecked(
     skillTriggered = true;
   }
   if (
+    !combatAbortedMove &&
     !move.drop &&
     applySatoriHeartFromNotation({
       board,
@@ -1205,6 +1248,7 @@ function applyMoveUnchecked(
     skillTriggered = true;
   }
   if (
+    !combatAbortedMove &&
     !move.drop &&
     fromSquare &&
     moveGearFollowLeader({
@@ -1223,9 +1267,11 @@ function applyMoveUnchecked(
     skillTriggered = true;
   }
 
-  const landedPiece = board.get(move.to);
-  if (landedPiece?.side === actorSide && applyPoisonHazardsOnLanding(skillState, board, actorSide, move.to)) {
-    skillTriggered = true;
+  if (!combatAbortedMove) {
+    const landedPiece = board.get(move.to);
+    if (landedPiece?.side === actorSide && applyPoisonHazardsOnLanding(skillState, board, actorSide, move.to)) {
+      skillTriggered = true;
+    }
   }
   applyPassiveSkillAuras(skillState, board, rules);
   applyMutantReverts(board);
@@ -1239,6 +1285,7 @@ function applyMoveUnchecked(
   let grantsConvexFollowup = false;
   if (
     allowSkills &&
+    !combatAbortedMove &&
     !move.drop &&
     fromSquare &&
     isConvex(movedPiece, resolveDef(rules, movedPiece))
@@ -1264,6 +1311,15 @@ function applyMoveUnchecked(
         (entry) => asString(entry.status_type ?? entry.statusType) !== 'convex_followup',
       );
     }
+  }
+
+  if (!combatAbortedMove && !move.drop && fromSquare) {
+    recordLastMovedPieceForBook(
+      skillState,
+      actorSide,
+      movedPiece,
+      resolveDef(rules, movedPiece),
+    );
   }
 
   return {
@@ -1651,7 +1707,8 @@ function moveAdjacentAllySandWithLeader(context: SkillContext) {
   const deltaCol = to.col - from.col;
   if (deltaRow === 0 && deltaCol === 0) return false;
   let moved = false;
-  forEachAdjacent(from, (row, col) => {
+  // 着手駒は既に to にいるため、連携対象は to 周囲の味方砂のみ（from 基準だと着手駒を二重移動させる）
+  forEachAdjacent(to, (row, col) => {
     const source = formatSquare(row, col);
     const ally = context.board.get(source);
     if (!ally || ally.side !== context.actorSide || canonicalPieceCode(ally.code) !== 'SAND') return;
@@ -1856,9 +1913,9 @@ function hasAdjacentEnemyForSkill(
 
 const HOUSE_SUMMON_HOME_DEPTH = 4;
 
-function isHousePieceCode(code: string, char?: string | null): boolean {
+function isHousePieceForSkill(code: string, char?: string | null): boolean {
   const normalized = normalizeSkillPieceCode(code, char ?? undefined);
-  return normalized === 'HOUSE' || normalized === 'FIELD' || char === '家' || char === '畑';
+  return normalized === 'HOUSE' || char === '家';
 }
 
 function isPeoplePieceCode(code: string, char?: string | null): boolean {
@@ -1885,9 +1942,9 @@ function generateHouseSkillOnlyMoves(
   const moves: NormalizedMove[] = [];
   for (const [square, piece] of state.board.entries()) {
     if (piece.side !== side) continue;
-    if (isPieceImmobilized(state.skillState, piece, square)) continue;
+    if (isPieceImmobilized(state.skillState, state.board, rules, piece, square)) continue;
     const pieceDef = resolvePieceDefinition(rules, piece);
-    if (!isHousePieceCode(piece.code, pieceDef?.char)) continue;
+    if (!isHousePieceForSkill(piece.code, pieceDef?.char)) continue;
     moves.push({
       from: square,
       to: square,
@@ -1993,7 +2050,7 @@ function generateTimeSkillOnlyMoves(
   const moves: NormalizedMove[] = [];
   for (const [square, piece] of state.board.entries()) {
     if (piece.side !== side) continue;
-    if (isPieceImmobilized(state.skillState, piece, square)) continue;
+    if (isPieceImmobilized(state.skillState, state.board, rules, piece, square)) continue;
     const pieceDef = rules.piecesByCode[piece.code];
     const movedCode = normalizeSkillPieceCode(piece.code, pieceDef?.char);
     if (movedCode !== 'TIME') continue;
@@ -2256,7 +2313,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
     ) {
       applied = applyAdjacentEnemyStatus(context, 'stun', 4) || applied;
     }
-    if (context.move.notation === 'house_skill_only' && isHousePieceCode(movedCode, pieceDef?.char)) {
+    if (context.move.notation === 'house_skill_only' && isHousePieceForSkill(movedCode, pieceDef?.char)) {
       applied = summonPeopleInHomeRandomEmpty(context, rules) || applied;
     }
     if (movedCode === 'BEAST') {
@@ -2518,10 +2575,16 @@ function isIllegalPawnDropMate(state: InternalGameState, rules: RuleSnapshot, de
 }
 
 function resolvePieceDefinition(rules: RuleSnapshot, piece: InternalPiece) {
-  return (
+  const direct =
     rules.piecesByCode[piece.code] ??
     rules.piecesByCode[canonicalPieceCode(piece.code)] ??
-    Object.values(rules.piecesByCode).find((def) => def.pieceCode.toUpperCase() === piece.code) ??
+    Object.values(rules.piecesByCode).find((def) => def.pieceCode.toUpperCase() === piece.code);
+  if (direct) return direct;
+
+  const upper = piece.code.trim().toUpperCase();
+  return (
+    Object.values(rules.piecesByCode).find((def) => def.sfenCode?.trim().toUpperCase() === upper) ??
+    Object.values(rules.piecesByCode).find((def) => def.canonicalCode?.trim().toUpperCase() === upper) ??
     null
   );
 }
@@ -2562,9 +2625,18 @@ function arrayOfRecords(raw: unknown): Record<string, unknown>[] {
     : [];
 }
 
-function isPieceImmobilized(skillState: SkillState, piece: InternalPiece, square: string) {
+function isPieceImmobilized(
+  skillState: SkillState,
+  board: InternalBoard,
+  rules: RuleSnapshot,
+  piece: InternalPiece,
+  square: string,
+) {
   if (piece.code === 'OU') return false;
   const position = parseSquare(square);
+  if (isCellAdjacentToAnySaint(board, rules, position.row, position.col, formatSquare)) {
+    return true;
+  }
   return skillState.piece_statuses.some((entry) => {
     const statusType = asString(entry.status_type ?? entry.statusType);
     if (
@@ -2816,6 +2888,7 @@ function filterByMovementModifier(
   source: Square,
   pieceCode: string,
   board: InternalBoard,
+  rules: RuleSnapshot,
 ) {
   if (pieceCode === 'OU') return targets;
   const danceAwareModifiers = pruneDanceMovementModifiersNotAdjacentToMai(
@@ -2831,10 +2904,14 @@ function filterByMovementModifier(
   );
   const rule = asString(modifier?.movement_rule ?? modifier?.movementRule);
   if (!rule) return targets;
+  const peopleFieldBuff = peopleFieldBuffActive(board, rules, side, pieceCode);
   return targets.filter((target) => {
     const dr = target.row - source.row;
     const dc = target.col - source.col;
-    if (rule === 'orthogonal_step_only') return Math.abs(dr) + Math.abs(dc) === 1;
+    if (rule === 'orthogonal_step_only') {
+      if (Math.abs(dr) + Math.abs(dc) === 1) return true;
+      return peopleFieldBuff && Math.abs(dr) === 1 && Math.abs(dc) === 1;
+    }
     if (rule === 'vertical_step_only') return dc === 0 && Math.abs(dr) === 1;
     if (rule === 'diagonal_forward_step_only') {
       return dr === orientRowDelta(side, -1) && Math.abs(dc) === 1;

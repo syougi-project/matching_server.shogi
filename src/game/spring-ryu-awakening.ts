@@ -7,16 +7,16 @@ type BoardPiece = {
   promoted: boolean;
 };
 
-/** 小竜（覚醒前）— 斜め3 + 縦横1（piece_info / BFF dragon）。 */
+/** 小竜（覚醒前）— 斜め何マスでも + 縦横1（HTML dragonMoves）。 */
 export const RYU_DRAGON_MOVE_VECTORS: PieceDefinition['moveVectors'] = [
-  { dx: -1, dy: -1, maxStep: 3 },
+  { dx: -1, dy: -1, maxStep: 8 },
   { dx: 0, dy: -1, maxStep: 1 },
-  { dx: 1, dy: -1, maxStep: 3 },
+  { dx: 1, dy: -1, maxStep: 8 },
   { dx: -1, dy: 0, maxStep: 1 },
   { dx: 1, dy: 0, maxStep: 1 },
-  { dx: -1, dy: 1, maxStep: 3 },
+  { dx: -1, dy: 1, maxStep: 8 },
   { dx: 0, dy: 1, maxStep: 1 },
-  { dx: 1, dy: 1, maxStep: 3 },
+  { dx: 1, dy: 1, maxStep: 8 },
 ];
 
 /** 辰（覚醒後）— 全方位3マス（BFF dragonAwakened）。 */

@@ -13,6 +13,7 @@ import {
   isSatori,
   isSeal,
   isSear,
+  isShield,
   isSoul,
   isSaute,
   isStew,
@@ -31,6 +32,41 @@ type SkillState = {
 };
 
 type Square = { row: number; col: number };
+
+const SHIELD_ABORT_PROC_CHANCE = 0.5;
+
+function shieldForwardRowDelta(side: PlayerSide): number {
+  return side === 'black' ? -1 : 1;
+}
+
+/** 味方「盾」の前方以外に隣接した味方が敵に取られるとき、50% で着手全体を無効化する。 */
+export function tryShieldIntrinsicAbortHostileCapture(input: {
+  actorSide: PlayerSide;
+  victim: PortedPiece;
+  victimRow: number;
+  victimCol: number;
+  board: InternalBoard;
+  rules: RuleSnapshot;
+  parseSquare: (square: string) => Square;
+}): boolean {
+  if (input.victim.side === input.actorSide) return false;
+
+  let hasQualifyingShield = false;
+  for (const [square, piece] of input.board.entries()) {
+    if (!isShield(piece, resolveDef(input.rules, piece))) continue;
+    if (piece.side !== input.victim.side) continue;
+    const pos = input.parseSquare(square);
+    const dr = input.victimRow - pos.row;
+    const dc = input.victimCol - pos.col;
+    if (Math.abs(dr) > 1 || Math.abs(dc) > 1 || (dr === 0 && dc === 0)) continue;
+    const fwdRow = pos.row + shieldForwardRowDelta(piece.side);
+    if (input.victimRow === fwdRow && input.victimCol === pos.col) continue;
+    hasQualifyingShield = true;
+    break;
+  }
+  if (!hasQualifyingShield) return false;
+  return Math.random() < SHIELD_ABORT_PROC_CHANCE;
+}
 
 export function tryOboroEvadeCapture(input: {
   board: InternalBoard;

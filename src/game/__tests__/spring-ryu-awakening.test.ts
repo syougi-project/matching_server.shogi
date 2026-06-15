@@ -72,6 +72,32 @@ describe('spring-ryu-awakening', () => {
     expect(result.nextGame.boardState['4b']).toBe('black:RYU');
   });
 
+  test('allows 4-square diagonal slide without spring ally', () => {
+    const rules = createDragonRules();
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:RYU',
+      },
+      handsState: { black: {}, white: {} },
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '1i', piece: 'RYU', promote: false, drop: false },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['1i']).toBe('black:RYU');
+  });
+
   test('rejects 3-square orthogonal slide without spring ally', () => {
     const rules = createDragonRules();
     const game: GameSnapshot = {

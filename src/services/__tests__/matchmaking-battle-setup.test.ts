@@ -103,4 +103,42 @@ describe('MatchmakingService battle setup integration', () => {
     expect(match?.game.handsState.white.FU).toBe(1);
     expect(pending.filter((event) => event.eventType === 'battle_setup.consume')).toHaveLength(2);
   });
+
+  test('removes both queue entries when battle setup loading fails', async () => {
+    const queueRepository = new InMemoryQueueRepository();
+    const matchRepository = new InMemoryMatchRepository();
+    const eventRepository = new InMemoryIntegrationEventRepository();
+    const queueService = new QueueService(queueRepository, config);
+    const battleSetupClient = {
+      async getBattleSetup() {
+        throw new Error('Battle setup not found');
+      },
+    };
+    const matchmaking = new MatchmakingService(
+      queueRepository,
+      matchRepository,
+      new BffEventPublisher(eventRepository),
+      new BasicRuleEngine(),
+      new RuleSnapshotBuilder(new InMemoryPieceCatalogProvider()),
+      battleSetupClient as any,
+      config,
+    );
+
+    await queueService.enterQueue({
+      userId: 'user-1',
+      connectionId: 'conn-1',
+      rating: 1500,
+      battleSetupId: 'bsetup_black',
+    });
+    await queueService.enterQueue({
+      userId: 'user-2',
+      connectionId: 'conn-2',
+      rating: 1500,
+      battleSetupId: 'bsetup_white',
+    });
+
+    await expect(matchmaking.runOnce()).rejects.toThrow('Battle setup not found');
+    expect(await queueRepository.findActiveByUserId('user-1')).toBeNull();
+    expect(await queueRepository.findActiveByUserId('user-2')).toBeNull();
+  });
 });

@@ -110,11 +110,16 @@ export function startLocalDevServer(port = 3010) {
           socket.send(JSON.stringify(response));
 
           if (trustedMessage.action === 'enter_queue') {
-            const match = await context.services.matchmaking.runOnce();
-            if (match) {
-              runtime.matchIdByUserId.set(match.playerBlackUserId, match.matchId);
-              runtime.matchIdByUserId.set(match.playerWhiteUserId, match.matchId);
-              await broadcastMatchStarted(runtime, match);
+            try {
+              const match = await context.services.matchmaking.runOnce();
+              if (match) {
+                runtime.matchIdByUserId.set(match.playerBlackUserId, match.matchId);
+                runtime.matchIdByUserId.set(match.playerWhiteUserId, match.matchId);
+                await broadcastMatchStarted(runtime, match);
+              }
+            } catch (error) {
+              console.error('[matching_server] matchmaking failed after enter_queue', error);
+              socket.send(JSON.stringify(toErrorMessage(trustedMessage.requestId, error)));
             }
             return;
           }
@@ -214,7 +219,14 @@ export function startLocalDevServer(port = 3010) {
 async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession) {
   const blackSocket = runtime.socketByUserId.get(match.playerBlackUserId);
   const whiteSocket = runtime.socketByUserId.get(match.playerWhiteUserId);
-  if (!blackSocket || !whiteSocket) return;
+  if (!blackSocket || !whiteSocket) {
+    console.warn('[matching_server] match created but websocket missing for broadcast', {
+      matchId: match.matchId,
+      hasBlackSocket: Boolean(blackSocket),
+      hasWhiteSocket: Boolean(whiteSocket),
+    });
+    return;
+  }
 
   const blackFound = buildMatchFoundMessage(match, match.playerBlackUserId);
   const whiteFound = buildMatchFoundMessage(match, match.playerWhiteUserId);

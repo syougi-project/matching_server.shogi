@@ -75,6 +75,7 @@ export class MatchmakingService {
         this.queueRepository.releaseReservation(seed.queueEntryId, seedToken),
         this.queueRepository.releaseReservation(opponent.queueEntryId, seedToken),
       ]);
+      await this.removeQueueEntriesAfterMatchFailure(seed, opponent);
       throw error;
     }
     const matchedAt = nowIso();
@@ -148,16 +149,32 @@ export class MatchmakingService {
       return this.ruleEngine.createInitialGame(ruleSnapshot);
     }
 
-    const [blackSetup, whiteSetup] = await Promise.all([
-      this.battleSetupClient.getBattleSetup(black.battleSetupId, black.userId),
-      this.battleSetupClient.getBattleSetup(white.battleSetupId, white.userId),
+    try {
+      const [blackSetup, whiteSetup] = await Promise.all([
+        this.battleSetupClient.getBattleSetup(black.battleSetupId, black.userId),
+        this.battleSetupClient.getBattleSetup(white.battleSetupId, white.userId),
+      ]);
+      return createInitialGameFromBattleSetups({
+        rules: ruleSnapshot,
+        blackSetup,
+        whiteSetup,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[matchmaking] failed to load battle setups', {
+        blackSetupId: black.battleSetupId,
+        whiteSetupId: white.battleSetupId,
+        message,
+      });
+      throw error;
+    }
+  }
+
+  private async removeQueueEntriesAfterMatchFailure(seed: QueueEntry, opponent: QueueEntry) {
+    await Promise.all([
+      this.queueRepository.cancelByUserId(seed.userId).catch(() => false),
+      this.queueRepository.cancelByUserId(opponent.userId).catch(() => false),
     ]);
-    const base = createInitialGameFromBattleSetups({
-      rules: ruleSnapshot,
-      blackSetup,
-      whiteSetup,
-    });
-    return base;
   }
 }
 
@@ -202,3 +219,4 @@ export function buildMatchFoundMessage(match: MatchSession, userId: string): Mat
     opponent: selfIsBlack ? match.playerWhiteProfile : match.playerBlackProfile,
   };
 }
+

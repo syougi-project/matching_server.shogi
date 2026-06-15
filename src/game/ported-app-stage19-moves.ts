@@ -24,8 +24,9 @@ export type Stage19NormalizedMove = {
   notation: string | null;
 };
 
-export function moonMaxStep(moveCount: number): number {
-  const phase = ((moveCount % 4) + 4) % 4;
+/** 月: TURN（着手時点の turnNumber = moveCount + 1）を 4 で割った余りが 0 または 1 のとき全方位 1 マス、2 または 3 のとき全方位 2 マス */
+export function moonMaxStep(turnNumber: number): number {
+  const phase = ((Math.max(1, Math.floor(turnNumber)) % 4) + 4) % 4;
   return phase === 2 || phase === 3 ? 2 : 1;
 }
 
@@ -33,10 +34,10 @@ export function adjustVectorsForMoon(
   vectors: MoveVector[],
   piece: PortedPiece,
   def: PieceDefinition | null,
-  moveCount: number,
+  turnNumber: number,
 ): MoveVector[] {
   if (!isMoon(piece, def)) return vectors;
-  const maxStep = moonMaxStep(moveCount);
+  const maxStep = moonMaxStep(turnNumber);
   return [
     { dx: -1, dy: -1, maxStep },
     { dx: 0, dy: -1, maxStep },
@@ -112,19 +113,26 @@ export function generateGunTargets(input: {
 
   const r1 = fromRow + d;
   const r2 = fromRow + 2 * d;
-  const p1 = r1 >= 0 && r1 <= 8 ? input.board.get(input.formatSquare(r1, fromCol)) : null;
-  const p2 = r2 >= 0 && r2 <= 8 ? input.board.get(input.formatSquare(r2, fromCol)) : null;
+  const r1Valid = r1 >= 0 && r1 <= 8;
+  const r2Valid = r2 >= 0 && r2 <= 8;
+  const p1 = r1Valid ? input.board.get(input.formatSquare(r1, fromCol)) ?? null : null;
+  const p2 = r2Valid ? input.board.get(input.formatSquare(r2, fromCol)) ?? null : null;
+
   if (p1 && isFullyBlockingAlly(p1, input.piece, input.rules)) {
     // blocked
-  } else if (p1 && p1.side !== input.actorSide && input.canCaptureTarget(p1, resolveDef(input.rules, p1))) {
-    tryAdd(r1, fromCol);
+  } else if (r2Valid && p2 && p2.side === input.actorSide) {
+    // blocked by ally on destination
+  } else if (r1Valid && p1 && p1.side !== input.actorSide) {
+    if (r2Valid) tryAdd(r2, fromCol);
   } else if (!p1) {
     tryAdd(r1, fromCol);
-    if (p2 && p2.side !== input.actorSide && input.canCaptureTarget(p2, resolveDef(input.rules, p2))) {
+    if (r2Valid && p2 && p2.side !== input.actorSide && input.canCaptureTarget(p2, resolveDef(input.rules, p2))) {
       tryAdd(r2, fromCol);
-    } else if (!p2) {
+    } else if (r2Valid && !p2) {
       tryAdd(r2, fromCol);
     }
+  } else if (r1Valid && p1) {
+    if (r2Valid) tryAdd(r2, fromCol);
   }
 
   for (const [dr, dc] of [
@@ -156,6 +164,76 @@ function isFullyBlockingAlly(piece: PortedPiece, gun: PortedPiece, rules: RuleSn
   if (piece.side !== gun.side) return false;
   const def = resolveDef(rules, piece);
   return isKing(piece, def) || isArmor(piece, def) || piece.code === 'KBOSS' || def?.char === 'K';
+}
+
+export function computeGunPenetrationMidpoint(
+  actorSide: PlayerSide,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number,
+): Square | null {
+  const dr = toRow - fromRow;
+  const dc = toCol - fromCol;
+  if (fromCol === toCol) {
+    const d = actorSide === 'black' ? -1 : 1;
+    if (dr === 2 * d) return { row: fromRow + d, col: fromCol };
+  }
+  if (Math.abs(dr) === 2 && Math.abs(dc) === 2 && Math.abs(dr) === Math.abs(dc)) {
+    const sr = dr / 2;
+    const sc = dc / 2;
+    if (actorSide === 'black' && sr === 1 && Math.abs(sc) === 1) {
+      return { row: fromRow + sr, col: fromCol + sc };
+    }
+    if (actorSide === 'white' && sr === -1 && Math.abs(sc) === 1) {
+      return { row: fromRow + sr, col: fromCol + sc };
+    }
+  }
+  return null;
+}
+
+export function applyGunPenetrationMidCapture(input: {
+  board: InternalBoard;
+  rules: RuleSnapshot;
+  hands: Record<PlayerSide, Record<string, number>>;
+  actorSide: PlayerSide;
+  movedPiece: PortedPiece;
+  fromSquare: string;
+  toSquare: string;
+  formatSquare: (row: number, col: number) => string;
+  parseSquare: (square: string) => Square;
+  capturedToHandCode: (piece: PortedPiece) => string;
+  incrementHand: (side: PlayerSide, code: string) => void;
+}): boolean {
+  const from = input.parseSquare(input.fromSquare);
+  const to = input.parseSquare(input.toSquare);
+  const mid = computeGunPenetrationMidpoint(input.actorSide, from.row, from.col, to.row, to.col);
+  if (!mid) return false;
+  const midSquare = input.formatSquare(mid.row, mid.col);
+  const midPiece = input.board.get(midSquare);
+  if (!midPiece) return false;
+  if (midPiece.side === input.actorSide) {
+    if (isFullyBlockingAlly(midPiece, input.movedPiece, input.rules)) return false;
+    input.board.delete(midSquare);
+    return true;
+  }
+  const midDef = resolveDef(input.rules, midPiece);
+  if (!canCaptureTarget({
+    board: input.board,
+    rules: input.rules,
+    actorSide: input.actorSide,
+    mover: input.movedPiece,
+    moverDef: resolveDef(input.rules, input.movedPiece),
+    target: midPiece,
+    targetDef: midDef,
+  })) {
+    return false;
+  }
+  input.board.delete(midSquare);
+  if (midPiece.code !== 'OU') {
+    input.incrementHand(input.actorSide, input.capturedToHandCode(midPiece));
+  }
+  return true;
 }
 
 export function generateSatoriHeartNotationMoves(input: {

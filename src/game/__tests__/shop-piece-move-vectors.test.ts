@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   intrinsicMoveVectorOverride,
   COPPER_MOVE_VECTORS,
+  PHANTOM_MOVE_VECTORS,
+  YAMA_MOVE_VECTORS,
   NAKU_MOVE_VECTORS,
   TANE_SILVER_MOVE_VECTORS,
   WAVE_MOVE_VECTORS,
@@ -109,6 +111,49 @@ describe('shop-piece-move-vectors', () => {
     const vectors = intrinsicMoveVectorOverride(definition);
     expect(vectors?.some((v) => v.dx === 0 && v.dy === -1 && v.maxStep === 8)).toBe(true);
     expect(vectors?.some((v) => v.dx === 1 && v.dy === 0 && v.maxStep === 8)).toBe(true);
+  });
+
+  test('returns orthogonal + knight vectors for phantom even when catalog vectors are gold-like', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'PHANTOM',
+      canonicalCode: 'PHANTOM',
+      char: '幻',
+      name: '幻',
+      skill: '',
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 0, maxStep: 1 },
+        { dx: 1, dy: 0, maxStep: 1 },
+        { dx: 0, dy: 1, maxStep: 1 },
+      ],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(PHANTOM_MOVE_VECTORS);
+  });
+
+  test('returns diagonal one-step vectors for yama even when catalog vectors are forward-only', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'YAMA',
+      canonicalCode: 'YAMA',
+      char: '山',
+      name: '山',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(YAMA_MOVE_VECTORS);
   });
 
   test('returns bishop slide vectors for thunder even when catalog vectors are gold-like', () => {

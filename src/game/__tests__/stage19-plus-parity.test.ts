@@ -145,6 +145,52 @@ describe('stage19+ online skill parity', () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  test('moon allows 2-square move when turnNumber phase is 2 (moveCount 1)', () => {
+    const rules = createRules(['MOON', 'OU']);
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:MOON',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 1,
+      version: 2,
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '3e', piece: 'MOON' },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test('moon rejects 2-square move when turnNumber phase is 1 (moveCount 0)', () => {
+    const rules = createRules(['MOON', 'OU']);
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:MOON',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '3e', piece: 'MOON' },
+    });
+    expect(result.ok).toBe(false);
+  });
 });
 
 function emptySkillState(): GameSnapshot['skillState'] {

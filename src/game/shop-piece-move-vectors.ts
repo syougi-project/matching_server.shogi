@@ -27,6 +27,38 @@ export const COPPER_MOVE_VECTORS: MoveVector[] = [
   { dx: 0, dy: -1, maxStep: 8 },
 ];
 
+/** 幻 — 前後左右1マス + 桂馬飛び（HTML phantomMoves 準拠）。 */
+export const PHANTOM_MOVE_VECTORS: MoveVector[] = [
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+  { dx: -1, dy: -2, maxStep: 1 },
+  { dx: 1, dy: -2, maxStep: 1 },
+];
+
+/** 禽 — 前後左右スライド8（app normalizeVectorsForBird 準拠）。 */
+export const BIRD_MOVE_VECTORS: MoveVector[] = [
+  { dx: 0, dy: -1, maxStep: 8 },
+  { dx: -1, dy: 0, maxStep: 8 },
+  { dx: 1, dy: 0, maxStep: 8 },
+  { dx: 0, dy: 1, maxStep: 8 },
+];
+
+/** 桂 — BFF カタログに canJump が無い場合の保険。 */
+export const KNIGHT_MOVE_VECTORS: MoveVector[] = [
+  { dx: -1, dy: -2, maxStep: 1 },
+  { dx: 1, dy: -2, maxStep: 1 },
+];
+
+/** 山 — 斜め4方向に各1マス（HTML mountainMoves 準拠）。 */
+export const YAMA_MOVE_VECTORS: MoveVector[] = [
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: 1, dy: 1, maxStep: 1 },
+];
+
 /** 波（HTML: waveMoves）— 前後左右に各2マスまで。 */
 export const WAVE_MOVE_VECTORS: MoveVector[] = [
   { dx: 0, dy: -1, maxStep: 2 },
@@ -72,6 +104,20 @@ function isCopperDefinition(definition: PieceDefinition): boolean {
   );
 }
 
+function isPhantomDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '幻' || gameCode === 'PHANTOM' || code.includes('PHANTOM');
+}
+
+function isYamaDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '山' || gameCode === 'YAMA' || code.includes('YAMA');
+}
+
 function isWaveDefinition(definition: PieceDefinition): boolean {
   const char = definition.char.trim();
   const code = definition.pieceCode.toUpperCase();
@@ -106,10 +152,48 @@ function isSpringDefinition(definition: PieceDefinition): boolean {
   return char === '泉' || gameCode === 'SPRING' || code.includes('SPRING');
 }
 
-/** BFF カタログの moveVectors が未整備でも app エンジンと同じ移動にする。 */
+function isHouseDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '家' || gameCode === 'HOUSE' || code.includes('HOUSE') || code.endsWith('_ZIE');
+}
+
+function isFieldDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '畑' || gameCode === 'FIELD' || code.includes('FIELD') || code.endsWith('_ZTA');
+}
+
+function isBirdDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '禽' || gameCode === 'BIRD' || code.includes('BIRD') || code.includes('29ECAB1EF3C3');
+}
+
+function isKnightDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '桂' || gameCode === 'KE' || code === 'KE' || code === 'KNIGHT';
+}
+
+export function intrinsicCanJumpOverride(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '桂' || gameCode === 'KE' || code === 'KE';
+}
+
+/** BFF カタログの moveVectors / canJump が未整備でも app エンジンと同じ移動にする。 */
 export function intrinsicMoveVectorOverride(definition: PieceDefinition): MoveVector[] | null {
   const gacha = gachaMoveVectorOverride(definition);
   if (gacha) return gacha;
+  if (isHouseDefinition(definition) || isFieldDefinition(definition)) {
+    return [];
+  }
   if (isNakuDefinition(definition) || isTaneDefinition(definition)) {
     return TANE_SILVER_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
@@ -118,6 +202,18 @@ export function intrinsicMoveVectorOverride(definition: PieceDefinition): MoveVe
   }
   if (isCopperDefinition(definition)) {
     return COPPER_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isPhantomDefinition(definition)) {
+    return PHANTOM_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isYamaDefinition(definition)) {
+    return YAMA_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isBirdDefinition(definition)) {
+    return BIRD_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isKnightDefinition(definition)) {
+    return KNIGHT_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
   if (isRyuDefinition(definition)) {
     return RYU_DRAGON_MOVE_VECTORS.map((vector) => ({ ...vector }));
