@@ -16,7 +16,7 @@ import {
   tryOboroEvadeCapture,
   tryShieldIntrinsicAbortHostileCapture,
 } from '@/game/ported-app-capture-effects';
-import { isArmor, isGun, isKatana, resolveDef } from '@/game/ported-app-piece-code';
+import { isArmor, isEn, isGun, isKatana, resolveDef } from '@/game/ported-app-piece-code';
 import { resolveBookMoveVectors, recordLastMovedPieceForBook } from '@/game/ported-app-book-moves';
 import {
   applyGunPenetrationMidCapture,
@@ -786,6 +786,17 @@ function getMovementTargets(
     );
   }
 
+  if (isEn(mover, moverDef)) {
+    const kingFront = enAllyKingFrontTarget(board, side, source);
+    if (kingFront) {
+      const occupantEntry = findOccupantAt(board, rules, kingFront.row, kingFront.col, formatSquare);
+      const occupant = occupantEntry?.piece ?? null;
+      if (!occupant || occupant.side !== side) {
+        targets.push(kingFront);
+      }
+    }
+  }
+
   return filterByMovementModifier(
     dedupeSquares(targets).filter((target) => {
       if (isKingBlockedByPoisonCell(skillState, side, pieceCode, target.row, target.col)) return false;
@@ -1054,6 +1065,7 @@ function applyMoveUnchecked(
   let movedPiece: InternalPiece;
   let capturedPiece: InternalPiece | null = null;
   let phantomEvadedThisMove = false;
+  let holySwordEvadedThisMove = false;
   let shieldAbortedMove = false;
   let ritualAbortedMove = false;
   let combatAbortedMove = false;
@@ -1243,6 +1255,7 @@ function applyMoveUnchecked(
           board.set(holySwordEvade, capturedPiece);
           moveAttachedSkillState(skillState, capturedPiece.side, move.to, holySwordEvade);
           capturedPiece = null;
+          holySwordEvadedThisMove = true;
         } else {
           const oboroEvade = tryOboroEvadeCapture({
             board,
@@ -1368,7 +1381,8 @@ function applyMoveUnchecked(
   }
 
   combatAbortedMove = shieldAbortedMove || ritualAbortedMove;
-  let skillTriggered = phantomEvadedThisMove || combatAbortedMove || stage45SkillTriggered;
+  let skillTriggered =
+    phantomEvadedThisMove || holySwordEvadedThisMove || combatAbortedMove || stage45SkillTriggered;
   if (
     !combatAbortedMove &&
     !move.drop &&
@@ -2703,7 +2717,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
       applied = moveKingSameVector(context) || applied;
     }
     if (movedCode === 'GACHA_SOU') {
-      applied = addRandomAdjacentEmptyHazards(context, 'pit_cell', opposite(context.actorSide), 1, 3) || applied;
+      applied = addRandomAdjacentEmptyHazards(context, 'pit_cell', opposite(context.actorSide), 2, 3) || applied;
     }
     applied = moveAdjacentAllyKoGlueFollowLeader(context) || applied;
   }
@@ -3309,6 +3323,29 @@ function findKingSquare(board: InternalBoard, side: PlayerSide) {
     if (piece.side === side && canonicalPieceCode(piece.code) === 'OU') return square;
   }
   return null;
+}
+
+/** 味方王の「前」1マス（black は row-1、white は row+1）。 */
+function allyKingForwardSquare(board: InternalBoard, side: PlayerSide): Square | null {
+  const kingSquare = findKingSquare(board, side);
+  if (!kingSquare) return null;
+  const king = parseSquare(kingSquare);
+  const row = king.row + orientRowDelta(side, -1);
+  const col = king.col;
+  if (!isInsideBoard(row, col)) return null;
+  return { row, col };
+}
+
+/** 閹: 味方王の前1マス（通常の縦横1マスに加えて合法手に含める）。 */
+function enAllyKingFrontTarget(
+  board: InternalBoard,
+  side: PlayerSide,
+  source: Square,
+): Square | null {
+  const cell = allyKingForwardSquare(board, side);
+  if (!cell) return null;
+  if (cell.row === source.row && cell.col === source.col) return null;
+  return cell;
 }
 
 function hasUnpromotedPawnInFile(board: InternalBoard, side: PlayerSide, col: number) {

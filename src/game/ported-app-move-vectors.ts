@@ -225,6 +225,9 @@ export function resolveIntrinsicPortedMoveVectors(definition: PieceDefinition): 
   if (definitionMatchesAliases(definition, ['KA', '角'])) {
     return cloneVectors(BISHOP_DIAGONAL_MOVE_VECTORS);
   }
+  if (definitionChar(definition) === '山' || definitionMatchesAliases(definition, ['YAMA'])) {
+    return cloneVectors(DIAGONAL_ONE_STEP_VECTORS);
+  }
 
   return null;
 }

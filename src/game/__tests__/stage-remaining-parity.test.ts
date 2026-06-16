@@ -55,6 +55,32 @@ describe('remaining stage pieces parity', () => {
     expect(result.ok).toBe(false);
   });
 
+  test('pig allows 2-square orthogonal move before inheriting enemy movement', () => {
+    const rules = createRules(['PIG', 'FU', 'OU']);
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:PIG',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '5c', piece: 'PIG' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['5c']).toBe('black:PIG');
+    expect(result.nextGame.boardState['5e']).toBeUndefined();
+  });
+
   test('pig inherits captured piece movement code', () => {
     const rules = createRules(['PIG', 'FU', 'OU']);
     const game: GameSnapshot = {

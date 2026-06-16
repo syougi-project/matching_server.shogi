@@ -7,7 +7,9 @@ import {
   NAKU_MOVE_VECTORS,
   TANE_SILVER_MOVE_VECTORS,
   WAVE_MOVE_VECTORS,
+  PIG_MOVE_VECTORS,
 } from '@/game/shop-piece-move-vectors';
+import { EN_MOVE_VECTORS, SOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
 import type { PieceDefinition } from '@/types/domain';
 
 describe('shop-piece-move-vectors', () => {
@@ -71,6 +73,25 @@ describe('shop-piece-move-vectors', () => {
       sfenCode: 'WAVE',
     };
     expect(intrinsicMoveVectorOverride(definition)).toEqual(WAVE_MOVE_VECTORS);
+  });
+
+  test('returns orthogonal 2-step vectors for pig even when catalog vectors are pawn-like', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'PIG',
+      canonicalCode: 'PIG',
+      char: '豚',
+      name: 'Pig',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+      sfenCode: 'PIG',
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(PIG_MOVE_VECTORS);
   });
 
   test('returns knight + forward slide vectors for copper even when catalog vectors are gold-like', () => {
@@ -154,6 +175,42 @@ describe('shop-piece-move-vectors', () => {
       skillDefinitionsV2: null,
     };
     expect(intrinsicMoveVectorOverride(definition)).toEqual(YAMA_MOVE_VECTORS);
+  });
+
+  test('returns forward-two vectors for gacha sou even when catalog vectors are forward-only', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'GACHA_SOU',
+      canonicalCode: 'GACHA_SOU',
+      char: '艸',
+      name: '艸',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(SOU_MOVE_VECTORS);
+  });
+
+  test('returns orthogonal one-step vectors for gacha en even when catalog vectors are forward-only', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'GACHA_EN',
+      canonicalCode: 'GACHA_EN',
+      char: '閹',
+      name: '閹',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(EN_MOVE_VECTORS);
   });
 
   test('returns bishop slide vectors for thunder even when catalog vectors are gold-like', () => {

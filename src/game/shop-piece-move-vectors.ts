@@ -67,6 +67,14 @@ export const WAVE_MOVE_VECTORS: MoveVector[] = [
   { dx: 1, dy: 0, maxStep: 2 },
 ];
 
+/** 豚（HTML: pigMoves）— 継承前は前後左右に各2マスまで。 */
+export const PIG_MOVE_VECTORS: MoveVector[] = [
+  { dx: 0, dy: -1, maxStep: 2 },
+  { dx: 0, dy: 1, maxStep: 2 },
+  { dx: -1, dy: 0, maxStep: 2 },
+  { dx: 1, dy: 0, maxStep: 2 },
+];
+
 function isNakuDefinition(definition: PieceDefinition): boolean {
   const char = definition.char.trim();
   const code = definition.pieceCode.toUpperCase();
@@ -116,6 +124,13 @@ function isYamaDefinition(definition: PieceDefinition): boolean {
   const code = definition.pieceCode.toUpperCase();
   const gameCode = resolveGamePieceCode(definition);
   return char === '山' || gameCode === 'YAMA' || code.includes('YAMA');
+}
+
+function isPigDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '豚' || gameCode === 'PIG' || code.includes('PIG');
 }
 
 function isWaveDefinition(definition: PieceDefinition): boolean {
@@ -199,6 +214,9 @@ export function intrinsicMoveVectorOverride(definition: PieceDefinition): MoveVe
   }
   if (isWaveDefinition(definition)) {
     return WAVE_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isPigDefinition(definition)) {
+    return PIG_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
   if (isCopperDefinition(definition)) {
     return COPPER_MOVE_VECTORS.map((vector) => ({ ...vector }));

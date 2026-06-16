@@ -36,6 +36,7 @@ describe('holy sword capture evade', () => {
     expect(result.nextGame.boardState['5e']).toBe('white:FU');
     expect(result.nextGame.boardState['4e']).toBe('black:HOLY_SWORD');
     expect(result.nextGame.handsState.white.HOLY_SWORD ?? 0).toBe(0);
+    expect(result.nextGame.lastSkillTriggered).toBe(true);
   });
 
   test('sidesteps to one of two open horizontal squares when captured', () => {

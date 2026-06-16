@@ -82,6 +82,12 @@ export function isGun(piece: PortedPiece, def: PieceDefinition | null): boolean 
   return gameCode(piece, def) === 'GUN' || def?.char === '銃';
 }
 
+/** ガチャ「閹」: 前後左右1マス + 味方王の前1マスへ移動可。 */
+export function isEn(piece: PortedPiece, def: PieceDefinition | null): boolean {
+  const code = piece.code.toUpperCase();
+  return gameCode(piece, def) === 'GACHA_EN' || def?.char === '閹' || code.includes('GACHA_EN');
+}
+
 export function isMoon(piece: PortedPiece, def: PieceDefinition | null): boolean {
   return gameCode(piece, def) === 'MOON' || def?.char === '月';
 }
