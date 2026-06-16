@@ -1,16 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
-import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { BasicRuleEngine } from '@/game/basic-rule-engine';
 import type { PieceDefinition, RuleSnapshot } from '@/types/domain';
 
 const engine = new BasicRuleEngine();
 
-describe('YAMA diagonal one-step moves', () => {
-  test('default catalog registers YAMA so summoned pieces can move online', async () => {
-    const rules = await new RuleSnapshotBuilder(new InMemoryPieceCatalogProvider()).buildSnapshot();
-    expect(rules.piecesByCode.YAMA?.char).toBe('山');
-
+describe('SEAR forward-two and side-back-one moves', () => {
+  test('allows forward two-step move even when catalog vectors are forward-only', () => {
+    const rules = createSearRules();
     const result = engine.applyMove({
       actorSide: 'black',
       rules,
@@ -18,46 +14,24 @@ describe('YAMA diagonal one-step moves', () => {
         boardState: {
           '5i': 'black:OU',
           '5a': 'white:OU',
-          '5e': 'black:YAMA',
+          '5e': 'black:SEAR',
         },
         handsState: { black: {}, white: {} },
         turn: 'black',
         moveCount: 0,
         version: 1,
       },
-      move: { from: '5e', to: '4d', piece: 'YAMA', promote: false, drop: false },
-    });
-
-    expect(result.ok).toBe(true);
-  });
-
-  test('allows diagonal one-step moves even when catalog vectors are forward-only', () => {
-    const rules = createYamaRules();
-    const result = engine.applyMove({
-      actorSide: 'black',
-      rules,
-      game: {
-        boardState: {
-          '5i': 'black:OU',
-          '5a': 'white:OU',
-          '5e': 'black:YAMA',
-        },
-        handsState: { black: {}, white: {} },
-        turn: 'black',
-        moveCount: 0,
-        version: 1,
-      },
-      move: { from: '5e', to: '4d', piece: 'YAMA', promote: false, drop: false },
+      move: { from: '5e', to: '5c', piece: 'SEAR', promote: false, drop: false },
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.nextGame.boardState['4d']).toBe('black:YAMA');
+    expect(result.nextGame.boardState['5c']).toBe('black:SEAR');
     expect(result.nextGame.boardState['5e']).toBeUndefined();
   });
 
-  test('rejects orthogonal one-step move when catalog vectors are forward-only', () => {
-    const rules = createYamaRules();
+  test('allows lateral one-step move even when catalog vectors are forward-only', () => {
+    const rules = createSearRules();
     const result = engine.applyMove({
       actorSide: 'black',
       rules,
@@ -65,26 +39,26 @@ describe('YAMA diagonal one-step moves', () => {
         boardState: {
           '5i': 'black:OU',
           '5a': 'white:OU',
-          '5e': 'black:YAMA',
+          '5e': 'black:SEAR',
         },
         handsState: { black: {}, white: {} },
         turn: 'black',
         moveCount: 0,
         version: 1,
       },
-      move: { from: '5e', to: '5f', piece: 'YAMA', promote: false, drop: false },
+      move: { from: '5e', to: '4e', piece: 'SEAR', promote: false, drop: false },
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 });
 
-function createYamaRules(): RuleSnapshot {
-  const yama: PieceDefinition = {
-    pieceCode: 'YAMA',
-    canonicalCode: 'YAMA',
-    char: '山',
-    name: '山',
+function createSearRules(): RuleSnapshot {
+  const sear: PieceDefinition = {
+    pieceCode: 'SEAR',
+    canonicalCode: 'SEAR',
+    char: '焼',
+    name: '焼',
     skill: '',
     moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     canJump: false,
@@ -112,7 +86,7 @@ function createYamaRules(): RuleSnapshot {
         moveRules: [],
         skillDefinitionsV2: null,
       },
-      YAMA: yama,
+      SEAR: sear,
     },
     skillDefinitions: [],
   };

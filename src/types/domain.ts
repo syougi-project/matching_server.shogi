@@ -115,6 +115,8 @@ export type GameSnapshot = {
     movement_modifiers?: Record<string, unknown>[];
     piece_statuses?: Record<string, unknown>[];
     piece_defenses?: Record<string, unknown>[];
+    last_player_moved_piece?: Record<string, unknown>;
+    last_enemy_moved_piece?: Record<string, unknown>;
   };
   turn: Turn;
   moveCount: number;

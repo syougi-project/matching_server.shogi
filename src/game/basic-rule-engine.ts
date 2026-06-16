@@ -114,6 +114,8 @@ type SkillState = {
   movement_modifiers: Record<string, unknown>[];
   piece_statuses: Record<string, unknown>[];
   piece_defenses: Record<string, unknown>[];
+  last_player_moved_piece?: Record<string, unknown>;
+  last_enemy_moved_piece?: Record<string, unknown>;
 };
 
 type InternalGameState = {
@@ -1580,6 +1582,7 @@ function applyMoveUnchecked(
       actorSide,
       movedPiece,
       resolveDef(rules, movedPiece),
+      parseSquare(move.to),
     );
   }
 
@@ -2543,7 +2546,7 @@ function applyScriptedPieceSkills(rules: RuleSnapshot, context: SkillContext) {
     if (movedCode === 'BOAT') {
       applied = moveAllyBehindBoatOneStep(context) || applied;
     }
-    if (movedCode === 'BIRD') {
+    if (movedCode === 'BIRD' || movedCode.includes('29ECAB1EF3C3')) {
       applied = moveRandomAllyToCellBehindBird(context) || applied;
     }
     if (movedCode === 'WIND') {
@@ -2891,6 +2894,12 @@ function parseSkillState(raw: GameSnapshot['skillState']): SkillState {
     movement_modifiers: arrayOfRecords(raw?.movement_modifiers),
     piece_statuses: arrayOfRecords(raw?.piece_statuses),
     piece_defenses: arrayOfRecords(raw?.piece_defenses),
+    ...(raw?.last_player_moved_piece && typeof raw.last_player_moved_piece === 'object'
+      ? { last_player_moved_piece: { ...raw.last_player_moved_piece } }
+      : {}),
+    ...(raw?.last_enemy_moved_piece && typeof raw.last_enemy_moved_piece === 'object'
+      ? { last_enemy_moved_piece: { ...raw.last_enemy_moved_piece } }
+      : {}),
   };
 }
 
@@ -2901,6 +2910,12 @@ function cloneSkillState(skillState: SkillState): SkillState {
     movement_modifiers: skillState.movement_modifiers.map((entry) => ({ ...entry })),
     piece_statuses: skillState.piece_statuses.map((entry) => ({ ...entry })),
     piece_defenses: skillState.piece_defenses.map((entry) => ({ ...entry })),
+    ...(skillState.last_player_moved_piece
+      ? { last_player_moved_piece: { ...skillState.last_player_moved_piece } }
+      : {}),
+    ...(skillState.last_enemy_moved_piece
+      ? { last_enemy_moved_piece: { ...skillState.last_enemy_moved_piece } }
+      : {}),
   };
 }
 

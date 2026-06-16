@@ -29,7 +29,7 @@
     { "pieceCode": "BLUEONI" },
     { "pieceCode": "SWAMP" },
     { "pieceCode": "POISON" },
-    { "pieceCode": "WATERFALL" },
+    { "pieceCode": "WATERFALL", "serverMove": { "from": "5e", "to": "4e" } },
     { "pieceCode": "A" },
     { "pieceCode": "EXPERIMENT" },
     { "pieceCode": "TIN" },

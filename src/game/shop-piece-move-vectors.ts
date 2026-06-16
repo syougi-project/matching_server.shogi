@@ -1,5 +1,5 @@
 import { resolveGamePieceCode } from '@/catalog/game-piece-code';
-import { gachaMoveVectorOverride } from '@/game/gacha-piece-move-vectors';
+import { gachaMoveVectorOverride, SAUTE_MOVE_VECTORS, SEAR_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
 import { resolveIntrinsicPortedMoveVectors } from '@/game/ported-app-move-vectors';
 import {
   RYU_DRAGON_MOVE_VECTORS,
@@ -130,7 +130,7 @@ function isPigDefinition(definition: PieceDefinition): boolean {
   const char = definition.char.trim();
   const code = definition.pieceCode.toUpperCase();
   const gameCode = resolveGamePieceCode(definition);
-  return char === '豚' || gameCode === 'PIG' || code.includes('PIG');
+  return char === '豚' || gameCode === 'PIG' || code.includes('PIG') || code.includes('3EFA5702E75B');
 }
 
 function isWaveDefinition(definition: PieceDefinition): boolean {
@@ -165,6 +165,20 @@ function isSpringDefinition(definition: PieceDefinition): boolean {
   const code = definition.pieceCode.toUpperCase();
   const gameCode = resolveGamePieceCode(definition);
   return char === '泉' || gameCode === 'SPRING' || code.includes('SPRING');
+}
+
+function isSauteDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '炒' || gameCode === 'SAUTE' || code.includes('1732246A37D8');
+}
+
+function isSearDefinition(definition: PieceDefinition): boolean {
+  const char = definition.char.trim();
+  const code = definition.pieceCode.toUpperCase();
+  const gameCode = resolveGamePieceCode(definition);
+  return char === '焼' || gameCode === 'SEAR' || code.includes('FDC83CF95746');
 }
 
 function isHouseDefinition(definition: PieceDefinition): boolean {
@@ -227,6 +241,9 @@ export function intrinsicMoveVectorOverride(definition: PieceDefinition): MoveVe
   if (isYamaDefinition(definition)) {
     return YAMA_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
+  if (isSearDefinition(definition)) {
+    return SEAR_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
   if (isBirdDefinition(definition)) {
     return BIRD_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
@@ -241,6 +258,9 @@ export function intrinsicMoveVectorOverride(definition: PieceDefinition): MoveVe
   }
   if (isSpringDefinition(definition)) {
     return SPRING_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (isSauteDefinition(definition)) {
+    return SAUTE_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
   const ported = resolveIntrinsicPortedMoveVectors(definition);
   if (ported) {

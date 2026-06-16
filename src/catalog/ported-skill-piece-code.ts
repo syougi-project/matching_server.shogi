@@ -68,6 +68,9 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   膠: 'GACHA_KOU',
   煽: 'GACHA_AORI',
   舞: 'MAI',
+  滝: 'WATERFALL',
+  禽: 'BIRD',
+  豚: 'PIG',
 };
 
 function stripNamedPiecePrefix(code: string): string {
@@ -85,6 +88,9 @@ export function normalizePortedSkillPieceCode(raw: string, char?: string | null)
 
   if (code === 'WATER') return 'SUI';
   if (PORTED_SKILL_CODE_SET.has(code)) return code;
+  if (code.includes('8CC9287B7E93')) return 'WATERFALL';
+  if (code.includes('29ECAB1EF3C3')) return 'BIRD';
+  if (code.includes('3EFA5702E75B')) return 'PIG';
 
   const trimmedChar = char?.trim();
   if (trimmedChar && CHAR_TO_SKILL_CODE[trimmedChar]) {

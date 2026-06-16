@@ -1,11 +1,11 @@
 import type { PieceCatalogProvider } from '@/catalog/contracts';
-import { AORI_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
+import { AORI_MOVE_VECTORS, KOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
 import {
   RYU_DRAGON_MOVE_VECTORS,
   SPRING_MOVE_VECTORS,
   TATSU_DRAGON_AWAKENED_MOVE_VECTORS,
 } from '@/game/spring-ryu-awakening';
-import { WAVE_MOVE_VECTORS } from '@/game/shop-piece-move-vectors';
+import { WAVE_MOVE_VECTORS, YAMA_MOVE_VECTORS } from '@/game/shop-piece-move-vectors';
 import type { PieceDefinition } from '@/types/domain';
 
 const DEFAULT_PIECES: PieceDefinition[] = [
@@ -226,7 +226,7 @@ const DEFAULT_PIECES: PieceDefinition[] = [
     promotable: false,
     skill: 'poison_trail',
   }),
-  createPiece('GACHA_KOU', '膠', 'Glue', kingLikeVectors(), {
+  createPiece('GACHA_KOU', '膠', 'Glue', KOU_MOVE_VECTORS, {
     sfenCode: 'GACHA_KO',
     canonicalCode: 'GACHA_KOU',
     promotable: false,
@@ -235,6 +235,9 @@ const DEFAULT_PIECES: PieceDefinition[] = [
   createPiece('GACHA_AORI', '煽', 'Aori', AORI_MOVE_VECTORS, {
     sfenCode: 'GACHA_AORI',
     canonicalCode: 'GACHA_AORI',
+    promotable: false,
+  }),
+  createPiece('YAMA', '山', 'Yama', YAMA_MOVE_VECTORS, {
     promotable: false,
   }),
 ];

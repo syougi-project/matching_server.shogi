@@ -9,7 +9,7 @@ import {
   WAVE_MOVE_VECTORS,
   PIG_MOVE_VECTORS,
 } from '@/game/shop-piece-move-vectors';
-import { EN_MOVE_VECTORS, SOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
+import { EN_MOVE_VECTORS, KOU_MOVE_VECTORS, SAUTE_MOVE_VECTORS, SEAR_MOVE_VECTORS, SOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
 import type { PieceDefinition } from '@/types/domain';
 
 describe('shop-piece-move-vectors', () => {
@@ -193,6 +193,69 @@ describe('shop-piece-move-vectors', () => {
       skillDefinitionsV2: null,
     };
     expect(intrinsicMoveVectorOverride(definition)).toEqual(SOU_MOVE_VECTORS);
+  });
+
+  test('returns stir vectors for saute even when catalog vectors are forward-only', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'SAUTE',
+      canonicalCode: 'SAUTE',
+      char: '炒',
+      name: '炒',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(SAUTE_MOVE_VECTORS);
+  });
+
+  test('returns roast vectors for sear even when catalog vectors are forward-only', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'SEAR',
+      canonicalCode: 'SEAR',
+      char: '焼',
+      name: '焼',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(SEAR_MOVE_VECTORS);
+  });
+
+  test('returns forward-diag-back vectors for gacha kou even when catalog vectors are king-like', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'GACHA_KOU',
+      canonicalCode: 'GACHA_KOU',
+      char: '膠',
+      name: '膠',
+      skill: '',
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 0, maxStep: 1 },
+        { dx: 1, dy: 0, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+        { dx: 0, dy: 1, maxStep: 1 },
+        { dx: 1, dy: 1, maxStep: 1 },
+      ],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(KOU_MOVE_VECTORS);
   });
 
   test('returns orthogonal one-step vectors for gacha en even when catalog vectors are forward-only', () => {
