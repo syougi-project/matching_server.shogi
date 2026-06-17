@@ -9,7 +9,7 @@ import {
   WAVE_MOVE_VECTORS,
   PIG_MOVE_VECTORS,
 } from '@/game/shop-piece-move-vectors';
-import { EN_MOVE_VECTORS, KOU_MOVE_VECTORS, SAUTE_MOVE_VECTORS, SEAR_MOVE_VECTORS, SOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
+import { EN_MOVE_VECTORS, KOU_MOVE_VECTORS, NIGE_MOVE_VECTORS, SAUTE_MOVE_VECTORS, SEAR_MOVE_VECTORS, SOU_MOVE_VECTORS, TOU_MOVE_VECTORS } from '@/game/gacha-piece-move-vectors';
 import type { PieceDefinition } from '@/types/domain';
 
 describe('shop-piece-move-vectors', () => {
@@ -256,6 +256,56 @@ describe('shop-piece-move-vectors', () => {
       skillDefinitionsV2: null,
     };
     expect(intrinsicMoveVectorOverride(definition)).toEqual(KOU_MOVE_VECTORS);
+  });
+
+  test('returns tou vectors for gacha tou even when catalog vectors are gold-like', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'GACHA_TOU',
+      canonicalCode: 'GACHA_TOU',
+      char: '灯',
+      name: '灯',
+      skill: '',
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 0, maxStep: 1 },
+        { dx: 1, dy: 0, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+      ],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(TOU_MOVE_VECTORS);
+  });
+
+  test('returns nige vectors for legacy gacha to alias even when catalog vectors are gold-like', () => {
+    const definition: PieceDefinition = {
+      pieceCode: 'PIECE_GACHA_TO',
+      canonicalCode: 'PIECE_GACHA_TO',
+      char: '逃',
+      name: '逃',
+      skill: '',
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 0, maxStep: 1 },
+        { dx: 1, dy: 0, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+        { dx: 0, dy: 1, maxStep: 1 },
+      ],
+      canJump: false,
+      isPromoted: false,
+      promotable: false,
+      moveConstraints: null,
+      moveRules: [],
+      skillDefinitionsV2: null,
+    };
+    expect(intrinsicMoveVectorOverride(definition)).toEqual(NIGE_MOVE_VECTORS);
   });
 
   test('returns orthogonal one-step vectors for gacha en even when catalog vectors are forward-only', () => {

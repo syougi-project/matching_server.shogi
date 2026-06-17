@@ -38,6 +38,28 @@ export const EN_MOVE_VECTORS: MoveVector[] = [
   { dx: 0, dy: 1, maxStep: 1 },
 ];
 
+/** 灯（ガチャ）— 前後左右1マス + 後斜め2方向（app.shogi TOU_MOVE_VECTORS と同一）。 */
+export const TOU_MOVE_VECTORS: MoveVector[] = [
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: 1, dy: 1, maxStep: 1 },
+];
+
+/** 逃（ガチャ）— 全方向1マス（app.shogi NIGE_MOVE_VECTORS と同一）。 */
+export const NIGE_MOVE_VECTORS: MoveVector[] = [
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+  { dx: 1, dy: 1, maxStep: 1 },
+];
+
 /** BFF カタログの moveVectors が未整備でも app エンジンと同じ移動にする */
 export function gachaMoveVectorOverride(definition: PieceDefinition): MoveVector[] | null {
   const gameCode = resolveGamePieceCode(definition);
@@ -52,6 +74,12 @@ export function gachaMoveVectorOverride(definition: PieceDefinition): MoveVector
   }
   if (gameCode === 'GACHA_KOU' || gameCode === 'GACHA_KO' || definition.char.trim() === '膠') {
     return KOU_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (gameCode === 'GACHA_TOU' || definition.char.trim() === '灯') {
+    return TOU_MOVE_VECTORS.map((vector) => ({ ...vector }));
+  }
+  if (gameCode === 'GACHA_TOU2' || definition.char.trim() === '逃') {
+    return NIGE_MOVE_VECTORS.map((vector) => ({ ...vector }));
   }
   return null;
 }

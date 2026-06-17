@@ -1,4 +1,5 @@
 import { fetchJson } from '@/lib/fetch-json';
+import { shouldApplyPvpRatingForMatch } from '@/lib/online-match-rating-policy';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { MatchSession } from '@/types/domain';
 
@@ -23,9 +24,17 @@ export class BffPvpRatingClient {
   }
 
   async applyMatchFinished(match: MatchSession): Promise<void> {
-    if (match.status !== 'finished' || !match.winnerUserId) return;
+    if (
+      !shouldApplyPvpRatingForMatch({
+        status: match.status === 'aborted' ? 'aborted' : 'finished',
+        winnerUserId: match.winnerUserId,
+        endReason: match.endReason,
+      })
+    ) {
+      return;
+    }
 
-    const winnerId = match.winnerUserId;
+    const winnerId = match.winnerUserId!;
     const loserId =
       winnerId === match.playerBlackUserId
         ? match.playerWhiteUserId

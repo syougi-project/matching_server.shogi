@@ -998,14 +998,15 @@ function getMoveVectorsForPiece(definition: PieceDefinition, promoted: boolean):
   const intrinsicOverride = intrinsicMoveVectorOverride(definition);
   if (intrinsicOverride) return intrinsicOverride;
 
-  if (promoted && GOLD_PROMOTED_CODES.has(definition.pieceCode)) {
+  const gameCode = resolveGamePieceCode(definition);
+  if (promoted && GOLD_PROMOTED_CODES.has(gameCode)) {
     return goldPatterns().map((pattern) => ({
       dx: pattern.colDelta,
       dy: pattern.rowDelta,
       maxStep: pattern.maxStep,
     }));
   }
-  if (promoted && definition.pieceCode === 'KA') {
+  if (promoted && gameCode === 'KA') {
     return [
       ...definition.moveVectors,
       ...kingOrthogonalPatterns().map((pattern) => ({
@@ -1015,7 +1016,7 @@ function getMoveVectorsForPiece(definition: PieceDefinition, promoted: boolean):
       })),
     ];
   }
-  if (promoted && definition.pieceCode === 'HI') {
+  if (promoted && gameCode === 'HI') {
     return [
       ...definition.moveVectors,
       ...kingDiagonalPatterns().map((pattern) => ({
