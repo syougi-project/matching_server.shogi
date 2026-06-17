@@ -8,12 +8,12 @@ describe('BffPvpRatingClient', () => {
     const calls: string[] = [];
     const client = new BffPvpRatingClient('http://bff.test', 'token');
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => {
+    globalThis.fetch = (async () => {
       calls.push('fetch');
       return new Response(JSON.stringify({ ok: true, data: { rating: 1500, delta: 16 } }), {
         status: 200,
       });
-    };
+    }) as unknown as typeof fetch;
 
     try {
       await client.applyMatchFinished(baseMatch({ endReason: 'disconnect' }));
@@ -27,12 +27,12 @@ describe('BffPvpRatingClient', () => {
     const calls: string[] = [];
     const client = new BffPvpRatingClient('http://bff.test', 'token');
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => {
+    globalThis.fetch = (async () => {
       calls.push('fetch');
       return new Response(JSON.stringify({ ok: true, data: { rating: 1500, delta: 16 } }), {
         status: 200,
       });
-    };
+    }) as unknown as typeof fetch;
 
     try {
       await client.applyMatchFinished(baseMatch({ endReason: 'king_capture' }));
