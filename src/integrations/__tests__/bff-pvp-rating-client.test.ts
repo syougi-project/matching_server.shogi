@@ -4,18 +4,20 @@ import { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
 import type { MatchSession } from '@/types/domain';
 
 describe('BffPvpRatingClient', () => {
-  test('skips rating apply for disconnect finishes', async () => {
+  test('applies rating for disconnect finishes', async () => {
     const calls: string[] = [];
     const client = new BffPvpRatingClient('http://bff.test', 'token');
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => {
       calls.push('fetch');
-      return new Response(JSON.stringify({ ok: true, data: {} }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true, data: { rating: 1500, delta: 16 } }), {
+        status: 200,
+      });
     };
 
     try {
       await client.applyMatchFinished(baseMatch({ endReason: 'disconnect' }));
-      expect(calls).toEqual([]);
+      expect(calls.length).toBe(2);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -58,6 +60,9 @@ function baseMatch(overrides: Partial<MatchSession>): MatchSession {
     disconnectedAtBlack: null,
     disconnectedAtWhite: null,
     reconnectDeadlineAt: null,
+    battleReadyBlack: false,
+    battleReadyWhite: false,
+    turnClockStartedAt: null,
     ruleSnapshot: { version: 1, createdAt: '2026-05-01T00:00:00.000Z', piecesByCode: {}, skillDefinitions: [] },
     game: {
       version: 1,

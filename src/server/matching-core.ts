@@ -5,6 +5,7 @@ import {
   buildGameStateUpdatedMessage,
 } from '@/server/handlers/ws-message';
 import { handleWebSocketMessage, profileFor } from '@/server/handlers/ws-message';
+import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
 import type { MatchSession } from '@/types/domain';
 import type {
   GameFinishedMessage,
@@ -61,6 +62,16 @@ export class MatchingCore {
       return { response, broadcasts, match };
     }
 
+    if (message.action === 'signal_battle_ready' && response.type === 'battle_ready_ack') {
+      const match = await this.context.repositories.matches.findById(response.matchId);
+      if (match && response.clockStarted) {
+        const clockStarted = buildBattleClockStartedMessage(match);
+        broadcasts.push({ userId: match.playerBlackUserId, message: clockStarted });
+        broadcasts.push({ userId: match.playerWhiteUserId, message: clockStarted });
+      }
+      return { response, broadcasts, match };
+    }
+
     return { response, broadcasts, match: null };
   }
 
@@ -78,9 +89,14 @@ export class MatchingCore {
 
   async reconnect(matchId: string, userId: string, connectionId: string) {
     const match = await this.context.services.gameCommand.reconnect(matchId, userId, connectionId);
+    const reconnectMessages: WebSocketServerMessage[] = [buildGameStateUpdatedMessage(match)];
+    if (isBattleClockStarted(match)) {
+      reconnectMessages.push(buildBattleClockStartedMessage(match));
+    }
     return {
       match,
-      response: buildGameStateUpdatedMessage(match),
+      response: reconnectMessages[0],
+      extraResponses: reconnectMessages.slice(1),
       opponentMessage: {
         type: 'opponent_reconnected',
         matchId: match.matchId,

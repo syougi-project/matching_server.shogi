@@ -39,11 +39,19 @@ export type ResignMessage = {
   matchId: string;
 };
 
+export type SignalBattleReadyMessage = {
+  action: 'signal_battle_ready';
+  requestId: string;
+  userId: string;
+  matchId: string;
+};
+
 export type WebSocketClientMessage =
   | EnterQueueMessage
   | CancelQueueMessage
   | MakeMoveMessage
-  | ResignMessage;
+  | ResignMessage
+  | SignalBattleReadyMessage;
 
 export type WebSocketServerMessage =
   | {
@@ -123,6 +131,18 @@ export type WebSocketServerMessage =
   | {
       type: 'opponent_reconnected';
       matchId: string;
+    }
+  | {
+      type: 'battle_ready_ack';
+      matchId: string;
+      requestId: string;
+      clockStarted: boolean;
+    }
+  | {
+      type: 'battle_clock_started';
+      matchId: string;
+      gameVersion: number;
+      turnSeconds: number;
     }
   | {
       type: 'error';

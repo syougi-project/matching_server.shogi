@@ -18,8 +18,14 @@ describe('MatchingCore king capture', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
     expect(match).not.toBeNull();
+    match = await context.services.gameCommand.signalBattleReady(
+      match!.matchId,
+      match!.playerBlackUserId,
+    ).then(() =>
+      context.services.gameCommand.signalBattleReady(match!.matchId, match!.playerWhiteUserId),
+    ).then(({ match: readyMatch }) => readyMatch);
 
     await context.repositories.matches.save({
       ...match!,

@@ -1,7 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import { InMemoryPieceCatalogProvider } from '@/catalog/default-piece-catalog';
 import { createServerContext } from '@/server/context';
-import type { GameSnapshot } from '@/types/domain';
+import type { GameSnapshot, MatchSession } from '@/types/domain';
+
+async function markBothBattleReady(
+  context: ReturnType<typeof createServerContext>,
+  match: MatchSession,
+): Promise<MatchSession> {
+  await context.services.gameCommand.signalBattleReady(match.matchId, match.playerBlackUserId);
+  const { match: readyMatch } = await context.services.gameCommand.signalBattleReady(
+    match.matchId,
+    match.playerWhiteUserId,
+  );
+  return readyMatch;
+}
 
 describe('GameCommandService', () => {
   test('rejects stale version moves', async () => {
@@ -18,8 +30,9 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
-    expect(match).not.toBeNull();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.services.gameCommand.makeMove({
       matchId: match!.matchId,
@@ -52,7 +65,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     const finished = await context.services.gameCommand.resign(match!.matchId, match!.playerBlackUserId);
     const pending = await context.repositories.integrationEvents.listPending();
 
@@ -75,7 +89,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     const disconnected = await context.services.gameCommand.disconnect(
       match!.matchId,
       match!.playerBlackUserId,
@@ -104,7 +119,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     await context.repositories.matches.save({
       ...match!,
       reconnectDeadlineAt: '2000-01-01T00:00:00.000Z',
@@ -132,7 +148,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     const updated = await context.services.gameCommand.makeMove({
@@ -161,7 +178,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     await context.repositories.matches.save({
@@ -200,7 +218,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     await context.repositories.matches.save({
@@ -257,7 +276,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     await expect(
@@ -284,7 +304,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     await expect(
@@ -311,7 +332,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     const customGame: GameSnapshot = {
@@ -355,7 +377,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     const customGame: GameSnapshot = {
@@ -403,7 +426,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     const customGame: GameSnapshot = {
@@ -453,7 +477,8 @@ describe('GameCommandService', () => {
         rating: 1500,
       });
 
-      const match = await context.services.matchmaking.runOnce();
+      let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
       expect(match).not.toBeNull();
 
       const customGame: GameSnapshot = {
@@ -505,7 +530,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     const customGame: GameSnapshot = {
@@ -549,7 +575,8 @@ describe('GameCommandService', () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -583,7 +610,8 @@ describe('GameCommandService', () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -630,7 +658,8 @@ describe('GameCommandService', () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -679,7 +708,8 @@ describe('GameCommandService', () => {
     });
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -713,7 +743,8 @@ describe('GameCommandService', () => {
     });
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -753,7 +784,8 @@ describe('GameCommandService', () => {
     });
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -799,7 +831,8 @@ describe('GameCommandService', () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -841,7 +874,8 @@ describe('GameCommandService', () => {
       rating: 1500,
     });
 
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
     expect(match).not.toBeNull();
 
     await context.repositories.matches.save({
@@ -878,7 +912,8 @@ describe('GameCommandService', () => {
     const context = createServerContext();
     await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
     await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
-    const match = await context.services.matchmaking.runOnce();
+    let match = await context.services.matchmaking.runOnce();
+    if (match) match = await markBothBattleReady(context, match);
 
     await context.repositories.matches.save({
       ...match!,
@@ -905,5 +940,36 @@ describe('GameCommandService', () => {
 
     expect(updated.game.boardState['5d']).toBeUndefined();
     expect(updated.game.boardState['4d']).toBe('black:GACHA_KOU');
+  });
+
+  test('starts turn clock only after both players signal battle ready', async () => {
+    const context = createServerContext();
+    await context.services.queue.enterQueue({ userId: 'user-1', connectionId: 'conn-1', rating: 1500 });
+    await context.services.queue.enterQueue({ userId: 'user-2', connectionId: 'conn-2', rating: 1500 });
+    let match = await context.services.matchmaking.runOnce();
+    expect(match).not.toBeNull();
+
+    await expect(
+      context.services.gameCommand.makeMove({
+        matchId: match!.matchId,
+        userId: match!.playerBlackUserId,
+        expectedVersion: 1,
+        move: { from: '7g', to: '7f', piece: 'FU' },
+      }),
+    ).rejects.toMatchObject({ code: 'BATTLE_NOT_READY' });
+
+    const firstReady = await context.services.gameCommand.signalBattleReady(
+      match!.matchId,
+      match!.playerBlackUserId,
+    );
+    expect(firstReady.clockJustStarted).toBe(false);
+    expect(firstReady.match.turnClockStartedAt).toBeNull();
+
+    const secondReady = await context.services.gameCommand.signalBattleReady(
+      match!.matchId,
+      match!.playerWhiteUserId,
+    );
+    expect(secondReady.clockJustStarted).toBe(true);
+    expect(secondReady.match.turnClockStartedAt).not.toBeNull();
   });
 });

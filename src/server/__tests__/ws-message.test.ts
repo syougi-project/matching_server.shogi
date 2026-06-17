@@ -37,6 +37,8 @@ describe('handleWebSocketMessage', () => {
     });
 
     const match = await context.services.matchmaking.runOnce();
+    await context.services.gameCommand.signalBattleReady(match!.matchId, match!.playerBlackUserId);
+    await context.services.gameCommand.signalBattleReady(match!.matchId, match!.playerWhiteUserId);
     await context.services.gameCommand.makeMove({
       matchId: match!.matchId,
       userId: match!.playerBlackUserId,

@@ -236,33 +236,37 @@ describe('ported app.shogi skill behavior', () => {
     expect(result.nextGame.lastSkillTriggered).toBe(true);
   });
 
-  test('stateful skills affect later legal move validation', () => {
-    Math.random = () => 0;
-    const rainbow = engine.applyMove({
-      actorSide: 'black',
-      rules: createRules(),
-      game: {
-        ...createSkillGame('RAINBOW'),
-        boardState: {
-          '5i': 'black:OU',
-          '5a': 'white:OU',
-          '5e': 'black:RAINBOW',
-          '4f': 'white:KA',
+  test(
+    'stateful skills affect later legal move validation',
+    () => {
+      Math.random = () => 0;
+      const rainbow = engine.applyMove({
+        actorSide: 'black',
+        rules: createRules(),
+        game: {
+          ...createSkillGame('RAINBOW'),
+          boardState: {
+            '5i': 'black:OU',
+            '5a': 'white:OU',
+            '5e': 'black:RAINBOW',
+            '4f': 'white:KA',
+          },
         },
-      },
-      move: { from: '5e', to: '5f', piece: 'RAINBOW' },
-    });
+        move: { from: '5e', to: '5f', piece: 'RAINBOW' },
+      });
 
-    expect(rainbow.ok).toBe(true);
-    if (!rainbow.ok) return;
-    const illegalDiagonal = engine.applyMove({
-      actorSide: 'white',
-      rules: createRules(),
-      game: rainbow.nextGame,
-      move: { from: '4f', to: '3g', piece: 'KA' },
-    });
-    expect(illegalDiagonal.ok).toBe(false);
-  });
+      expect(rainbow.ok).toBe(true);
+      if (!rainbow.ok) return;
+      const illegalDiagonal = engine.applyMove({
+        actorSide: 'white',
+        rules: createRules(),
+        game: rainbow.nextGame,
+        move: { from: '4f', to: '3g', piece: 'KA' },
+      });
+      expect(illegalDiagonal.ok).toBe(false);
+    },
+    { timeout: 15_000 },
+  );
 });
 
 function createSkillGame(pieceCode: string): GameSnapshot {

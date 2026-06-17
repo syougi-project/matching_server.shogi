@@ -81,6 +81,18 @@ export async function handleWebSocketMessage(
           reason: match.endReason ?? 'unknown',
         };
       }
+      case 'signal_battle_ready': {
+        const { match, clockJustStarted } = await context.services.gameCommand.signalBattleReady(
+          message.matchId,
+          message.userId,
+        );
+        return {
+          type: 'battle_ready_ack',
+          matchId: match.matchId,
+          requestId: message.requestId,
+          clockStarted: clockJustStarted,
+        };
+      }
     }
   } catch (error) {
     if (error instanceof DomainError && error.code === 'VERSION_MISMATCH') {

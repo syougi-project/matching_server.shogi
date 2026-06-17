@@ -86,6 +86,9 @@ function matchFromPayload(event: IntegrationEvent): MatchSession {
     disconnectedAtBlack: null,
     disconnectedAtWhite: null,
     reconnectDeadlineAt: null,
+    battleReadyBlack: false,
+    battleReadyWhite: false,
+    turnClockStartedAt: null,
     ruleSnapshot: { version: 0, createdAt: event.createdAt, piecesByCode: {}, skillDefinitions: [] },
     game: {
       version: 0,

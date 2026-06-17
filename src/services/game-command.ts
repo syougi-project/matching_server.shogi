@@ -1,4 +1,5 @@
 import { DomainError } from '@/lib/errors';
+import { isBattleClockStarted } from '@/lib/battle-clock';
 import { nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
@@ -27,6 +28,12 @@ export class GameCommandService {
     const match = await this.requireMatch(input.matchId);
     if (match.status !== 'started') {
       throw new DomainError('MATCH_NOT_ACTIVE', 'Match is not in started state.');
+    }
+    if (!isBattleClockStarted(match)) {
+      throw new DomainError(
+        'BATTLE_NOT_READY',
+        'Both players must enter the battle screen before making moves.',
+      );
     }
 
     const actorSide = sideForUser(match, input.userId);
@@ -135,6 +142,36 @@ export class GameCommandService {
     await this.matchRepository.save(finished);
     await this.publishFinished(finished);
     return finished;
+  }
+
+  async signalBattleReady(matchId: string, userId: string) {
+    const match = await this.requireMatch(matchId);
+    if (match.status !== 'started') {
+      return { match, clockJustStarted: false };
+    }
+
+    const side = sideForUser(match, userId);
+    if (!side) {
+      throw new DomainError('MATCH_ACCESS_DENIED', 'User does not belong to this match.');
+    }
+
+    const alreadyReady = side === 'black' ? match.battleReadyBlack : match.battleReadyWhite;
+    if (alreadyReady) {
+      return { match, clockJustStarted: false };
+    }
+
+    const next: MatchSession = {
+      ...match,
+      battleReadyBlack: side === 'black' ? true : match.battleReadyBlack,
+      battleReadyWhite: side === 'white' ? true : match.battleReadyWhite,
+    };
+    let clockJustStarted = false;
+    if (next.battleReadyBlack && next.battleReadyWhite && !next.turnClockStartedAt) {
+      next.turnClockStartedAt = nowIso();
+      clockJustStarted = true;
+    }
+    await this.matchRepository.save(next);
+    return { match: next, clockJustStarted };
   }
 
   async reconnect(matchId: string, userId: string, connectionId: string) {

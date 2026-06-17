@@ -98,6 +98,9 @@ async function connect(
           event.requestContext.connectionId,
         );
         await post(deps, event.requestContext.connectionId, result.response);
+        for (const extra of result.extraResponses ?? []) {
+          await post(deps, event.requestContext.connectionId, extra);
+        }
         if (result.opponentMessage) {
           await postToOpponent(deps, result.match, claims.userId, result.opponentMessage);
         }

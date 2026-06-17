@@ -177,6 +177,12 @@ export type MatchSession = {
   disconnectedAtBlack: string | null;
   disconnectedAtWhite: string | null;
   reconnectDeadlineAt: string | null;
+  /** 対戦画面に遷移して準備完了したか（先手側） */
+  battleReadyBlack: boolean;
+  /** 対戦画面に遷移して準備完了したか（後手側） */
+  battleReadyWhite: boolean;
+  /** 両者が対戦画面に入った時刻。手番タイマーはこの後に開始 */
+  turnClockStartedAt: string | null;
   ruleSnapshot: RuleSnapshot;
   game: GameSnapshot;
 };

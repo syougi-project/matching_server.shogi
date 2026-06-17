@@ -4,6 +4,7 @@ import { getHealth } from '@/server/handlers/health';
 import { handleWebSocketMessage } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
+import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
 import { buildMatchFoundMessage } from '@/services/matchmaking';
 import { verifyMatchmakingTicket } from '@/lib/matchmaking-ticket';
 import type {
@@ -84,6 +85,9 @@ export function startLocalDevServer(port = 3010) {
             const match = await context.services.gameCommand.reconnect(activeMatchId, userId, connectionId);
             runtime.matchIdByUserId.set(userId, match.matchId);
             socket.send(JSON.stringify(buildGameStateUpdatedMessage(match)));
+            if (isBattleClockStarted(match)) {
+              socket.send(JSON.stringify(buildBattleClockStartedMessage(match)));
+            }
             await notifyOpponentReconnected(runtime, match, userId);
           } catch (error) {
             socket.send(JSON.stringify(toErrorMessage(undefined, error)));
@@ -151,6 +155,15 @@ export function startLocalDevServer(port = 3010) {
             if (match) {
               await broadcastToOpponent(runtime, match, trustedMessage.userId, response);
             }
+            return;
+          }
+
+          if (trustedMessage.action === 'signal_battle_ready' && response.type === 'battle_ready_ack') {
+            if (!response.clockStarted) return;
+            const match = await context.repositories.matches.findById(response.matchId);
+            if (!match) return;
+            const clockStarted = buildBattleClockStartedMessage(match);
+            await broadcastToMatch(runtime, match, clockStarted);
           }
         },
         async close(socket) {
@@ -252,7 +265,7 @@ async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession)
 async function broadcastToMatch(
   runtime: RuntimeState,
   match: MatchSession,
-  message: GameStateUpdatedMessage | GameFinishedMessage,
+  message: GameStateUpdatedMessage | GameFinishedMessage | WebSocketServerMessage,
 ) {
   runtime.socketByUserId.get(match.playerBlackUserId)?.send(JSON.stringify(message));
   runtime.socketByUserId.get(match.playerWhiteUserId)?.send(JSON.stringify(message));

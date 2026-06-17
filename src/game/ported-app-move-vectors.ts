@@ -25,6 +25,39 @@ const DIAGONAL_ONE_STEP_VECTORS: MoveVector[] = [
   { dx: 1, dy: 1, maxStep: 1 },
 ];
 
+const ORTHOGONAL_ONE_STEP_VECTORS: MoveVector[] = [
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+];
+
+/** 龍王（成飛）: 縦横何マスでも + 斜め1マス */
+export const DRAGON_KING_MOVE_VECTORS: MoveVector[] = [
+  ...ROOK_ORTHOGONAL_MOVE_VECTORS,
+  ...DIAGONAL_ONE_STEP_VECTORS,
+];
+
+/** 龍馬（成角）: 斜め何マスでも + 縦横1マス */
+export const DRAGON_HORSE_MOVE_VECTORS: MoveVector[] = [
+  ...BISHOP_DIAGONAL_MOVE_VECTORS,
+  ...ORTHOGONAL_ONE_STEP_VECTORS,
+];
+
+const PROMOTED_DISPLAY_TO_BASE_GAME_CODE: Record<string, string> = {
+  TO: 'FU',
+  NY: 'KY',
+  NK: 'KE',
+  NG: 'GI',
+  UM: 'KA',
+  RY: 'HI',
+};
+
+export function baseGameCodeForStandardPromotion(definition: PieceDefinition): string {
+  const gameCode = normalizedDefinitionCode(definition);
+  return PROMOTED_DISPLAY_TO_BASE_GAME_CODE[gameCode] ?? gameCode;
+}
+
 const LANCE_FORWARD_MOVE_VECTORS: MoveVector[] = [{ dx: 0, dy: -1, maxStep: SLIDE_MAX }];
 
 const LEAD_MOVE_VECTORS: MoveVector[] = [

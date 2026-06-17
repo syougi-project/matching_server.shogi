@@ -77,6 +77,9 @@ import {
   resolveSenZaiFallbackVectors,
 } from '@/game/ported-app-stage45-pieces';
 import {
+  baseGameCodeForStandardPromotion,
+} from '@/game/ported-app-move-vectors';
+import {
   intrinsicCanJumpOverride,
   intrinsicMoveVectorOverride,
 } from '@/game/shop-piece-move-vectors';
@@ -995,20 +998,22 @@ function generateLeapOverOneTargets(
 }
 
 function getMoveVectorsForPiece(definition: PieceDefinition, promoted: boolean): MoveVector[] {
-  const intrinsicOverride = intrinsicMoveVectorOverride(definition);
-  if (intrinsicOverride) return intrinsicOverride;
+  const baseCode = baseGameCodeForStandardPromotion(definition);
 
-  const gameCode = resolveGamePieceCode(definition);
-  if (promoted && GOLD_PROMOTED_CODES.has(gameCode)) {
+  if (promoted && GOLD_PROMOTED_CODES.has(baseCode)) {
     return goldPatterns().map((pattern) => ({
       dx: pattern.colDelta,
       dy: pattern.rowDelta,
       maxStep: pattern.maxStep,
     }));
   }
-  if (promoted && gameCode === 'KA') {
+
+  const intrinsicOverride = intrinsicMoveVectorOverride(definition);
+  const baseVectors = intrinsicOverride ?? definition.moveVectors;
+
+  if (promoted && baseCode === 'KA') {
     return [
-      ...definition.moveVectors,
+      ...baseVectors,
       ...kingOrthogonalPatterns().map((pattern) => ({
         dx: pattern.colDelta,
         dy: pattern.rowDelta,
@@ -1016,9 +1021,9 @@ function getMoveVectorsForPiece(definition: PieceDefinition, promoted: boolean):
       })),
     ];
   }
-  if (promoted && gameCode === 'HI') {
+  if (promoted && baseCode === 'HI') {
     return [
-      ...definition.moveVectors,
+      ...baseVectors,
       ...kingDiagonalPatterns().map((pattern) => ({
         dx: pattern.colDelta,
         dy: pattern.rowDelta,
@@ -1026,6 +1031,8 @@ function getMoveVectorsForPiece(definition: PieceDefinition, promoted: boolean):
       })),
     ];
   }
+
+  if (intrinsicOverride) return intrinsicOverride;
   return definition.moveVectors;
 }
 

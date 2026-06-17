@@ -109,6 +109,9 @@ export class MatchmakingService {
       disconnectedAtBlack: null,
       disconnectedAtWhite: null,
       reconnectDeadlineAt: null,
+      battleReadyBlack: false,
+      battleReadyWhite: false,
+      turnClockStartedAt: null,
       ruleSnapshot,
       game: initialGame,
     };

@@ -229,6 +229,9 @@ describe('DynamoMatchRepository', () => {
       disconnectedAtBlack: null,
       disconnectedAtWhite: null,
       reconnectDeadlineAt: null,
+      battleReadyBlack: false,
+      battleReadyWhite: false,
+      turnClockStartedAt: null,
       ruleSnapshot: { version: 1, createdAt: '2026-01-01T00:00:00.000Z', piecesByCode: {}, skillDefinitions: [] },
       game: {
         boardState: {},
