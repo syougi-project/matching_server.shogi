@@ -82,6 +82,13 @@ export function isGun(piece: PortedPiece, def: PieceDefinition | null): boolean 
   return gameCode(piece, def) === 'GUN' || def?.char === '銃';
 }
 
+/** 駒ショップ「走」: 前方最大2マス（1マス目が空のときのみ2マス目）。 */
+export function isRun(piece: PortedPiece, def: PieceDefinition | null): boolean {
+  const code = piece.code.toUpperCase();
+  const gc = gameCode(piece, def);
+  return gc === 'SO' || gc === 'SHOP_SO' || def?.char === '走' || code.includes('SHOP_SO');
+}
+
 /** ガチャ「閹」: 前後左右1マス + 味方王の前1マスへ移動可。 */
 export function isEn(piece: PortedPiece, def: PieceDefinition | null): boolean {
   const code = piece.code.toUpperCase();

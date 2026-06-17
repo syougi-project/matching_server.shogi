@@ -73,6 +73,27 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   豚: 'PIG',
 };
 
+/** BFF instance id の hex 断片 → canonical skill code */
+const OPAQUE_HEX_TO_SKILL_CODE: Readonly<Record<string, string>> = {
+  '8CC9287B7E93': 'WATERFALL',
+  '29ECAB1EF3C3': 'BIRD',
+  '3EFA5702E75B': 'PIG',
+  'F75D88C48D6D': 'COW',
+  '5D848242A136': 'BOOK',
+  '7FC715661514': 'ZAI',
+  '124C31EA5D7A': 'CHERRY',
+  'C4AEB81F3634': 'GIANT',
+  '6D4AFA9CDF1C': 'SATORI',
+  'CA16911978FF': 'HEART',
+};
+
+function resolveOpaqueHexSkillCode(code: string): string | null {
+  for (const [hex, skillCode] of Object.entries(OPAQUE_HEX_TO_SKILL_CODE)) {
+    if (code.includes(hex)) return skillCode;
+  }
+  return null;
+}
+
 function stripNamedPiecePrefix(code: string): string {
   const upper = code.trim().toUpperCase();
   if (!upper.startsWith('PIECE_')) return upper;
@@ -88,9 +109,8 @@ export function normalizePortedSkillPieceCode(raw: string, char?: string | null)
 
   if (code === 'WATER') return 'SUI';
   if (PORTED_SKILL_CODE_SET.has(code)) return code;
-  if (code.includes('8CC9287B7E93')) return 'WATERFALL';
-  if (code.includes('29ECAB1EF3C3')) return 'BIRD';
-  if (code.includes('3EFA5702E75B')) return 'PIG';
+  const fromOpaqueHex = resolveOpaqueHexSkillCode(code);
+  if (fromOpaqueHex) return fromOpaqueHex;
 
   const trimmedChar = char?.trim();
   if (trimmedChar && CHAR_TO_SKILL_CODE[trimmedChar]) {

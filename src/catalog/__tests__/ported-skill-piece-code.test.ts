@@ -16,6 +16,13 @@ describe('ported-skill-piece-code', () => {
     ['TANE', '種', 'TANE'],
     ['PIECE_3D76F6398BE6', '竜', 'RYU'],
     ['PIECE_3319765CD612', '泉', 'SPRING'],
+    ['PIECE_F75D88C48D6D', '牛', 'COW'],
+    ['PIECE_5D848242A136', '書', 'BOOK'],
+    ['PIECE_7FC715661514', '財', 'ZAI'],
+    ['PIECE_124C31EA5D7A', '桜', 'CHERRY'],
+    ['PIECE_C4AEB81F3634', '巨', 'GIANT'],
+    ['PIECE_3EFA5702E75B', '豚', 'PIG'],
+    ['PIECE_29ECAB1EF3C3', '禽', 'BIRD'],
     ['FLAME', null, 'FLAME'],
   ] as const)('normalizePortedSkillPieceCode(%s, %s) -> %s', (raw, char, expected) => {
     expect(normalizePortedSkillPieceCode(raw, char)).toBe(expected);

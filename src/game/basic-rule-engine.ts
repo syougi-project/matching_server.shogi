@@ -16,7 +16,8 @@ import {
   tryOboroEvadeCapture,
   tryShieldIntrinsicAbortHostileCapture,
 } from '@/game/ported-app-capture-effects';
-import { isArmor, isEn, isGun, isKatana, resolveDef } from '@/game/ported-app-piece-code';
+import { isArmor, isEn, isGun, isKatana, isRun, resolveDef } from '@/game/ported-app-piece-code';
+import { generateRunForwardTargets } from '@/game/ported-app-run-move';
 import { resolveBookMoveVectors, recordLastMovedPieceForBook } from '@/game/ported-app-book-moves';
 import {
   applyGunPenetrationMidCapture,
@@ -659,6 +660,26 @@ function getMovementTargets(
         formatSquare,
         canCaptureTarget: (target, targetDef) =>
           canCaptureTargetAt(board, rules, side, mover, moverDef, target, targetDef, formatSquare),
+      }),
+      skillState,
+      side,
+      source,
+      definition.pieceCode,
+      board,
+      rules,
+    );
+  }
+
+  if (isRun(mover, moverDef)) {
+    return filterByMovementModifier(
+      generateRunForwardTargets({
+        board,
+        rules,
+        actorSide: side,
+        from: source,
+        piece: mover,
+        def: moverDef,
+        formatSquare,
       }),
       skillState,
       side,
