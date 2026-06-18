@@ -111,7 +111,7 @@ export function startLocalDevServer(port = 3010) {
 
           const trustedMessage = applySocketIdentity(message, socket.data);
           const response = await handleWebSocketMessage(context, socket.data.connectionId, trustedMessage);
-          socket.send(JSON.stringify(response));
+          sendJson(socket, response);
 
           if (trustedMessage.action === 'enter_queue') {
             try {
@@ -145,6 +145,7 @@ export function startLocalDevServer(port = 3010) {
                   winnerUserId: match.winnerUserId,
                   reason: match.endReason ?? 'king_capture',
                 });
+                await flushIntegrationOutbox(context);
               }
             }
             return;
@@ -154,6 +155,7 @@ export function startLocalDevServer(port = 3010) {
             const match = await context.repositories.matches.findById(response.matchId);
             if (match) {
               await broadcastToOpponent(runtime, match, trustedMessage.userId, response);
+              await flushIntegrationOutbox(context);
             }
             return;
           }
@@ -191,6 +193,7 @@ export function startLocalDevServer(port = 3010) {
                 winnerUserId: match.winnerUserId,
                 reason: match.endReason ?? 'disconnect',
               });
+              await flushIntegrationOutbox(context);
               return;
             }
             const deadline = match.reconnectDeadlineAt;
@@ -295,6 +298,26 @@ async function notifyOpponentReconnected(
       matchId: match.matchId,
     } satisfies WebSocketServerMessage),
   );
+}
+
+function sendJson(socket: ServerWebSocket<RuntimeSocketData>, payload: unknown): void {
+  const text = JSON.stringify(payload);
+  if (!text) {
+    console.warn('[matching_server] skipped empty websocket payload', payload);
+    return;
+  }
+  socket.send(text);
+}
+
+async function flushIntegrationOutbox(context: ReturnType<typeof createServerContext>) {
+  try {
+    await context.services.outboxWorker.runOnce();
+  } catch (error) {
+    console.warn(
+      '[matching_server] failed to flush integration outbox:',
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 function toErrorMessage(requestId: string | undefined, error: unknown): WebSocketServerMessage {

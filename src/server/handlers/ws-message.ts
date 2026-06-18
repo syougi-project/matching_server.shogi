@@ -93,6 +93,15 @@ export async function handleWebSocketMessage(
           clockStarted: clockJustStarted,
         };
       }
+      default: {
+        const unknownMessage = message as { action?: unknown; requestId?: string };
+        return {
+          type: 'error',
+          requestId: unknownMessage.requestId,
+          code: 'INVALID_ACTION',
+          message: `Unknown action: ${String(unknownMessage.action ?? '')}`,
+        };
+      }
     }
   } catch (error) {
     if (error instanceof DomainError && error.code === 'VERSION_MISMATCH') {
