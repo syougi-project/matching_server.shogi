@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { InMemoryIntegrationEventRepository } from '@/repositories/memory/integration-event-repository';
-import { OutboxWorkerService } from '@/services/outbox-worker';
+import { createOutboxEventHandlers, OutboxWorkerService } from '@/services/outbox-worker';
 import type { IntegrationEvent, MatchSession } from '@/types/domain';
 
 describe('OutboxWorkerService', () => {
@@ -13,9 +13,20 @@ describe('OutboxWorkerService', () => {
 
     const worker = new OutboxWorkerService(
       events,
-      { recordResult: async (match: MatchSession) => recorded.push(match.matchId) } as any,
-      { applyMatchFinished: async (match: MatchSession) => rated.push(match.matchId) } as any,
-      null,
+      createOutboxEventHandlers({
+        matchResultRecorder: {
+          recordResult: async (match: MatchSession) => {
+            recorded.push(match.matchId);
+            return undefined;
+          },
+        },
+        pvpRatingApplier: {
+          applyMatchFinished: async (match: MatchSession) => {
+            rated.push(match.matchId);
+            return undefined;
+          },
+        },
+      }),
     );
 
     const result = await worker.runOnce();
@@ -39,13 +50,13 @@ describe('OutboxWorkerService', () => {
 
     const worker = new OutboxWorkerService(
       events,
-      null,
-      null,
-      {
-        consumeBattleSetup: async (battleSetupId: string, ownerUserId: string) => {
-          consumed.push(`${ownerUserId}:${battleSetupId}`);
+      createOutboxEventHandlers({
+        battleSetupConsumer: {
+          consumeBattleSetup: async (battleSetupId: string, ownerUserId: string) => {
+            consumed.push(`${ownerUserId}:${battleSetupId}`);
+          },
         },
-      } as any,
+      }),
     );
 
     const result = await worker.runOnce();
@@ -59,9 +70,13 @@ describe('OutboxWorkerService', () => {
     await events.save(matchEvent('match.finished'));
     const worker = new OutboxWorkerService(
       events,
-      { recordResult: async () => { throw new Error('bff down'); } } as any,
-      null,
-      null,
+      createOutboxEventHandlers({
+        matchResultRecorder: {
+          recordResult: async () => {
+            throw new Error('bff down');
+          },
+        },
+      }),
     );
 
     const result = await worker.runOnce();

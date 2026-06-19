@@ -21,7 +21,7 @@ import type {
 } from '@/repositories/contracts';
 import { GameCommandService } from '@/services/game-command';
 import { MatchmakingService } from '@/services/matchmaking';
-import { OutboxWorkerService } from '@/services/outbox-worker';
+import { createOutboxEventHandlers, OutboxWorkerService } from '@/services/outbox-worker';
 import { QueueService } from '@/services/queue';
 
 export type ServerContextOverrides = {
@@ -96,9 +96,11 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
       ),
       outboxWorker: new OutboxWorkerService(
         integrationEvents,
-        matchResultClient,
-        pvpRatingClient,
-        battleSetupClient,
+        createOutboxEventHandlers({
+          matchResultRecorder: matchResultClient,
+          pvpRatingApplier: pvpRatingClient,
+          battleSetupConsumer: battleSetupClient,
+        }),
       ),
     },
   };

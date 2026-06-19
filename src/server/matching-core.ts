@@ -4,7 +4,7 @@ import {
   buildGameFinishedMessage,
   buildGameStateUpdatedMessage,
 } from '@/server/handlers/ws-message';
-import { handleWebSocketMessage, profileFor } from '@/server/handlers/ws-message';
+import { handleWebSocketCommand, profileFor } from '@/server/handlers/ws-message';
 import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
 import type { MatchSession } from '@/types/domain';
 import type {
@@ -22,7 +22,7 @@ export class MatchingCore {
   ) {}
 
   async handleClientMessage(connectionId: string, message: WebSocketClientMessage) {
-    const response = await handleWebSocketMessage(this.context, connectionId, message);
+    const { response, match } = await handleWebSocketCommand(this.context, connectionId, message);
     const broadcasts: Array<{ userId: string; message: WebSocketServerMessage }> = [];
 
     if (message.action === 'enter_queue') {
@@ -33,7 +33,6 @@ export class MatchingCore {
     }
 
     if (message.action === 'make_move' && response.type === 'game_state_updated') {
-      const match = await this.context.repositories.matches.findById(response.matchId);
       if (match) {
         const update = buildGameStateUpdatedMessage(match);
         const opponentUserId =
@@ -51,7 +50,6 @@ export class MatchingCore {
     }
 
     if (message.action === 'resign' && response.type === 'game_finished') {
-      const match = await this.context.repositories.matches.findById(response.matchId);
       if (match) {
         const opponentUserId =
           message.userId === match.playerBlackUserId
@@ -63,7 +61,6 @@ export class MatchingCore {
     }
 
     if (message.action === 'signal_battle_ready' && response.type === 'battle_ready_ack') {
-      const match = await this.context.repositories.matches.findById(response.matchId);
       if (match && response.clockStarted) {
         const clockStarted = buildBattleClockStartedMessage(match);
         broadcasts.push({ userId: match.playerBlackUserId, message: clockStarted });

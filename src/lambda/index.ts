@@ -1,4 +1,19 @@
 import { createServerContext } from '@/server/context';
+import {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+} from '@aws-sdk/client-apigatewaymanagementapi';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { SendMessageBatchCommand, SQSClient } from '@aws-sdk/client-sqs';
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { buildMatchStartedBroadcasts } from '@/server/matching-core';
 import { createWebSocketLambdaHandlers, type ApiGatewayWebSocketEvent } from '@/lambda/handlers';
 import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
@@ -16,8 +31,6 @@ import type { DynamoCommand, DynamoDocumentClientLike } from '@/repositories/dyn
 import type { ConnectionRecord, MatchSession } from '@/types/domain';
 import type { WebSocketServerMessage } from '@/types/protocol';
 
-declare const require: any;
-
 type WorkerEvent = {
   worker?: 'matchmaking' | 'reconnect_timeout' | 'outbox';
 };
@@ -34,10 +47,8 @@ type LambdaResponse = {
   body?: string;
 };
 
-const AWS = require('aws-sdk');
-
-const dynamoClient = new AWS.DynamoDB.DocumentClient({
-  convertEmptyValues: false,
+const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+  marshallOptions: { convertEmptyValues: false, removeUndefinedValues: true },
 });
 
 const connections = new DynamoConnectionRepository(createRuntimeOptions());
@@ -124,17 +135,17 @@ function createDocumentClient(client: any): DynamoDocumentClientLike {
     async send(command: DynamoCommand) {
       switch (command.kind) {
         case 'GetCommand':
-          return await client.get(command.input).promise();
+          return await client.send(new GetCommand(command.input as any));
         case 'PutCommand':
-          return await client.put(command.input).promise();
+          return await client.send(new PutCommand(command.input as any));
         case 'UpdateCommand':
-          return await client.update(command.input).promise();
+          return await client.send(new UpdateCommand(command.input as any));
         case 'QueryCommand':
-          return await client.query(command.input).promise();
+          return await client.send(new QueryCommand(command.input as any));
         case 'DeleteCommand':
-          return await client.delete(command.input).promise();
+          return await client.send(new DeleteCommand(command.input as any));
         case 'TransactWriteCommand':
-          return await client.transactWrite(command.input).promise();
+          return await client.send(new TransactWriteCommand(command.input as any));
         default:
           throw new Error('Unsupported Dynamo command');
       }
@@ -146,16 +157,16 @@ function createManagementApi() {
   const domain = requiredEnv('API_GATEWAY_WEBSOCKET_MANAGEMENT_DOMAIN');
   const stage = requiredEnv('API_GATEWAY_WEBSOCKET_STAGE');
   const endpoint = `https://${domain}/${stage}`;
-  const api = new AWS.ApiGatewayManagementApi({ endpoint });
+  const api = new ApiGatewayManagementApiClient({ endpoint });
 
   return {
     async postToConnection(input: { connectionId: string; data: string }) {
-      await api
-        .postToConnection({
+      await api.send(
+        new PostToConnectionCommand({
           ConnectionId: input.connectionId,
           Data: input.data,
-        })
-        .promise();
+        }),
+      );
     },
   };
 }
@@ -163,12 +174,12 @@ function createManagementApi() {
 function createMatchmakingRequestPublisher(): MatchmakingRequestPublisher | null {
   const queueUrl = process.env.MATCHING_MATCHMAKING_QUEUE_URL?.trim();
   if (!queueUrl) return null;
-  const sqs = new AWS.SQS();
+  const sqs = new SQSClient({});
   return {
     async requestMatchmaking(input: { queueEntryId: string; ratingBucket: number }) {
       const requestedAt = new Date().toISOString();
-      await sqs
-        .sendMessageBatch({
+      await sqs.send(
+        new SendMessageBatchCommand({
           QueueUrl: queueUrl,
           Entries: [0, 2, 10].map((delaySeconds) => ({
             Id: `matchmaking-${delaySeconds}`,
@@ -181,8 +192,8 @@ function createMatchmakingRequestPublisher(): MatchmakingRequestPublisher | null
               delaySeconds,
             }),
           })),
-        })
-        .promise();
+        }),
+      );
     },
   };
 }

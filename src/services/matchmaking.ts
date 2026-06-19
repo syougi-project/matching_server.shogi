@@ -4,9 +4,8 @@ import type { MatchingServerConfig } from '@/lib/config';
 import { RuleSnapshotBuilder } from '@/catalog/rule-snapshot';
 import { createInitialGameFromBattleSetups } from '@/game/initial-board';
 import type { RuleEngine } from '@/game/rule-engine';
-import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
-import { BffEventPublisher } from '@/integrations/bff-event-publisher';
 import type { MatchRepository, QueueRepository } from '@/repositories/contracts';
+import type { BattleSetupProvider, MatchEventPublisher } from '@/services/ports';
 import type { MatchSession, PlayerSide, QueueEntry } from '@/types/domain';
 import type { MatchFoundMessage } from '@/types/protocol';
 
@@ -14,10 +13,10 @@ export class MatchmakingService {
   constructor(
     private readonly queueRepository: QueueRepository,
     private readonly matchRepository: MatchRepository,
-    private readonly eventPublisher: BffEventPublisher,
+    private readonly eventPublisher: MatchEventPublisher,
     private readonly ruleEngine: RuleEngine,
     private readonly ruleSnapshotBuilder: RuleSnapshotBuilder,
-    private readonly battleSetupClient: BffBattleSetupClient | null,
+    private readonly battleSetupClient: BattleSetupProvider | null,
     private readonly config: MatchingServerConfig,
   ) {}
 
@@ -222,4 +221,3 @@ export function buildMatchFoundMessage(match: MatchSession, userId: string): Mat
     opponent: selfIsBlack ? match.playerWhiteProfile : match.playerBlackProfile,
   };
 }
-

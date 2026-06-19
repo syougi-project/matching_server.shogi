@@ -3,14 +3,14 @@ import { isBattleClockStarted } from '@/lib/battle-clock';
 import { nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
-import { BffEventPublisher } from '@/integrations/bff-event-publisher';
 import type { MatchRepository } from '@/repositories/contracts';
+import type { MatchEventPublisher } from '@/services/ports';
 import type { MatchSession, MovePayload, PlayerSide } from '@/types/domain';
 
 export class GameCommandService {
   constructor(
     private readonly matchRepository: MatchRepository,
-    private readonly eventPublisher: BffEventPublisher,
+    private readonly eventPublisher: MatchEventPublisher,
     private readonly ruleEngine: RuleEngine,
     private readonly config: MatchingServerConfig,
   ) {}
@@ -205,6 +205,10 @@ export class GameCommandService {
     await this.matchRepository.save(aborted);
     await this.eventPublisher.publishMatchEvent(aborted, 'match.aborted');
     return aborted;
+  }
+
+  async findMatch(matchId: string) {
+    return this.matchRepository.findById(matchId);
   }
 
   private async requireMatch(matchId: string) {

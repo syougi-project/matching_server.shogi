@@ -1,15 +1,17 @@
-import { BffBattleSetupClient } from '@/integrations/bff-battle-setup-client';
-import { BffMatchResultClient } from '@/integrations/bff-match-result-client';
-import type { BffPvpRatingClient } from '@/integrations/bff-pvp-rating-client';
 import type { IntegrationEventRepository } from '@/repositories/contracts';
+import type {
+  BattleSetupConsumer,
+  MatchResultRecorder,
+  PvpRatingApplier,
+} from '@/services/ports';
 import type { IntegrationEvent, MatchSession } from '@/types/domain';
+
+export type IntegrationEventHandler = (event: IntegrationEvent) => Promise<void>;
 
 export class OutboxWorkerService {
   constructor(
     private readonly events: IntegrationEventRepository,
-    private readonly matchResultClient: BffMatchResultClient | null,
-    private readonly pvpRatingClient: BffPvpRatingClient | null,
-    private readonly battleSetupClient: BffBattleSetupClient | null,
+    private readonly handlers: Partial<Record<IntegrationEvent['eventType'], IntegrationEventHandler>>,
   ) {}
 
   async runOnce(limit = 25) {
@@ -36,28 +38,32 @@ export class OutboxWorkerService {
   }
 
   private async deliver(event: IntegrationEvent) {
-    switch (event.eventType) {
-      case 'match.started':
-        return;
-      case 'match.finished': {
-        const match = matchFromPayload(event);
-        await this.matchResultClient?.recordResult(match);
-        await this.pvpRatingClient?.applyMatchFinished(match);
-        return;
-      }
-      case 'match.aborted': {
-        await this.matchResultClient?.recordResult(matchFromPayload(event));
-        return;
-      }
-      case 'battle_setup.consume': {
-        if (!this.battleSetupClient) return;
-        const battleSetupId = stringPayload(event, 'battleSetupId');
-        const ownerUserId = stringPayload(event, 'ownerUserId');
-        await this.battleSetupClient.consumeBattleSetup(battleSetupId, ownerUserId);
-        return;
-      }
-    }
+    await this.handlers[event.eventType]?.(event);
   }
+}
+
+export function createOutboxEventHandlers(input: {
+  matchResultRecorder?: MatchResultRecorder | null;
+  pvpRatingApplier?: PvpRatingApplier | null;
+  battleSetupConsumer?: BattleSetupConsumer | null;
+}): Partial<Record<IntegrationEvent['eventType'], IntegrationEventHandler>> {
+  return {
+    'match.started': async () => {},
+    'match.finished': async (event) => {
+      const match = matchFromPayload(event);
+      await input.matchResultRecorder?.recordResult(match);
+      await input.pvpRatingApplier?.applyMatchFinished(match);
+    },
+    'match.aborted': async (event) => {
+      await input.matchResultRecorder?.recordResult(matchFromPayload(event));
+    },
+    'battle_setup.consume': async (event) => {
+      if (!input.battleSetupConsumer) return;
+      const battleSetupId = stringPayload(event, 'battleSetupId');
+      const ownerUserId = stringPayload(event, 'ownerUserId');
+      await input.battleSetupConsumer.consumeBattleSetup(battleSetupId, ownerUserId);
+    },
+  };
 }
 
 function stringPayload(event: IntegrationEvent, key: string) {

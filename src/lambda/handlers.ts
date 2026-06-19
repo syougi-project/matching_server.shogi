@@ -83,6 +83,8 @@ async function connect(
     await deps.connections.save({
       connectionId: event.requestContext.connectionId,
       userId: claims.userId,
+      displayName: claims.displayName,
+      rating: claims.rating,
       connectedAt: now,
       lastSeenAt: now,
       status: 'connected',
@@ -173,7 +175,15 @@ async function message(
     return { statusCode: 200 };
   }
 
-  const trustedMessage = { ...message, userId: connection.userId } as WebSocketClientMessage;
+  const trustedMessage =
+    message.action === 'enter_queue'
+      ? ({
+          ...message,
+          userId: connection.userId,
+          displayName: connection.displayName ?? connection.userId,
+          rating: Number.isFinite(connection.rating) ? connection.rating : 0,
+        } as WebSocketClientMessage)
+      : ({ ...message, userId: connection.userId } as WebSocketClientMessage);
   const result = await core.handleClientMessage(connection.connectionId, trustedMessage);
   const responseDelivered = await tryPost(deps, connection, result.response);
   if (!responseDelivered) return { statusCode: 200 };
@@ -259,6 +269,6 @@ function toLambdaError(error: unknown): LambdaResponse {
   }
   return {
     statusCode: 500,
-    body: error instanceof Error ? error.message : 'Unexpected error',
+    body: 'Internal server error',
   };
 }

@@ -129,6 +129,8 @@ export type GameSnapshot = {
 export type ConnectionRecord = {
   connectionId: string;
   userId: string;
+  displayName: string;
+  rating: number;
   connectedAt: string;
   lastSeenAt: string;
   status: ConnectionStatus;

@@ -24,7 +24,40 @@ describe('websocket lambda handlers', () => {
 
     expect(response.statusCode).toBe(200);
     expect(stored?.userId).toBe('user-1');
+    expect(stored?.displayName).toBe('Alice');
+    expect(stored?.rating).toBe(1500);
     expect(stored?.status).toBe('connected');
+  });
+
+  test('enter queue uses signed ticket profile instead of client supplied profile', async () => {
+    const connections = new InMemoryConnectionRepository();
+    const context = createServerContext({ repositories: { connections } });
+    const handlers = createWebSocketLambdaHandlers({
+      context,
+      connections,
+      ticketSecret: secret,
+      managementApi: { postToConnection: async () => undefined },
+    });
+
+    await handlers.connect(event('conn-1', '$connect', null, {
+      ticket: ticket({ userId: 'user-1', displayName: 'Alice', rating: 1500 }),
+    }));
+
+    const response = await handlers.message(
+      event('conn-1', 'enter_queue', {
+        action: 'enter_queue',
+        requestId: 'req-1',
+        userId: 'attacker-user',
+        displayName: 'Mallory',
+        rating: 1,
+      }),
+    );
+    const active = await context.repositories.queue.findActiveByUserId('user-1');
+
+    expect(response.statusCode).toBe(200);
+    expect(active?.displayName).toBe('Alice');
+    expect(active?.rating).toBe(1500);
+    expect(active?.ratingBucket).toBe(1500);
   });
 
   test('connect rejects missing tickets', async () => {
@@ -76,6 +109,8 @@ describe('websocket lambda handlers', () => {
     await connections.save({
       connectionId: 'conn-1',
       userId: match!.playerBlackUserId,
+      displayName: 'Black',
+      rating: 1500,
       connectedAt: '2026-05-10T00:00:00.000Z',
       lastSeenAt: '2026-05-10T00:00:00.000Z',
       status: 'connected',
@@ -85,6 +120,8 @@ describe('websocket lambda handlers', () => {
     await connections.save({
       connectionId: 'conn-2',
       userId: match!.playerWhiteUserId,
+      displayName: 'White',
+      rating: 1500,
       connectedAt: '2026-05-10T00:00:00.000Z',
       lastSeenAt: '2026-05-10T00:00:00.000Z',
       status: 'connected',
@@ -128,6 +165,8 @@ describe('websocket lambda handlers', () => {
     await connections.save({
       connectionId: 'conn-1',
       userId: 'user-1',
+      displayName: 'Alice',
+      rating: 1500,
       connectedAt: '2026-05-10T00:00:00.000Z',
       lastSeenAt: '2026-05-10T00:00:00.000Z',
       status: 'connected',
