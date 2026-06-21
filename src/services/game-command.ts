@@ -1,3 +1,4 @@
+import { isDevBotUserId } from '@/lib/dev-bot';
 import { DomainError } from '@/lib/errors';
 import { isBattleClockStarted } from '@/lib/battle-clock';
 import { nowIso } from '@/lib/time';
@@ -165,6 +166,13 @@ export class GameCommandService {
       battleReadyBlack: side === 'black' ? true : match.battleReadyBlack,
       battleReadyWhite: side === 'white' ? true : match.battleReadyWhite,
     };
+    // 開発用ボットは WebSocket クライアントが無いため、人間側の準備完了と同時に開始する。
+    if (isDevBotUserId(match.playerBlackUserId)) {
+      next.battleReadyBlack = true;
+    }
+    if (isDevBotUserId(match.playerWhiteUserId)) {
+      next.battleReadyWhite = true;
+    }
     let clockJustStarted = false;
     if (next.battleReadyBlack && next.battleReadyWhite && !next.turnClockStartedAt) {
       next.turnClockStartedAt = nowIso();

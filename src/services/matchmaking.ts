@@ -1,3 +1,4 @@
+import { isDevBotUserId } from '@/lib/dev-bot';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
@@ -115,7 +116,17 @@ export class MatchmakingService {
       game: initialGame,
     };
     await this.matchRepository.save(match);
-    if (black.battleSetupId && white.battleSetupId) {
+    const humanEntry = isDevBotUserId(black.userId)
+      ? white
+      : isDevBotUserId(white.userId)
+        ? black
+        : null;
+    if (humanEntry?.battleSetupId && (isDevBotUserId(black.userId) || isDevBotUserId(white.userId))) {
+      await this.eventPublisher.publishBattleSetupConsume({
+        battleSetupId: humanEntry.battleSetupId,
+        ownerUserId: humanEntry.userId,
+      });
+    } else if (black.battleSetupId && white.battleSetupId) {
       await Promise.all([
         this.eventPublisher.publishBattleSetupConsume({
           battleSetupId: black.battleSetupId,
@@ -147,6 +158,36 @@ export class MatchmakingService {
   }
 
   private async buildInitialGame(ruleSnapshot: MatchSession['ruleSnapshot'], black: QueueEntry, white: QueueEntry) {
+    const humanEntry = isDevBotUserId(black.userId)
+      ? white
+      : isDevBotUserId(white.userId)
+        ? black
+        : null;
+    if (humanEntry && (isDevBotUserId(black.userId) || isDevBotUserId(white.userId))) {
+      if (!this.battleSetupClient || !humanEntry.battleSetupId) {
+        return this.ruleEngine.createInitialGame(ruleSnapshot);
+      }
+      try {
+        const humanSetup = await this.battleSetupClient.getBattleSetup(
+          humanEntry.battleSetupId,
+          humanEntry.userId,
+        );
+        return createInitialGameFromBattleSetups({
+          rules: ruleSnapshot,
+          blackSetup: humanSetup,
+          whiteSetup: humanSetup,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[matchmaking] failed to load dev-bot battle setup', {
+          battleSetupId: humanEntry.battleSetupId,
+          ownerUserId: humanEntry.userId,
+          message,
+        });
+        throw error;
+      }
+    }
+
     if (!this.battleSetupClient || !black.battleSetupId || !white.battleSetupId) {
       return this.ruleEngine.createInitialGame(ruleSnapshot);
     }

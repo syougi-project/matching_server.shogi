@@ -5,6 +5,7 @@ import { handleWebSocketMessage } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
+import { DEV_BOT_USER_ID, isDevBotUserId } from '@/lib/dev-bot';
 import { buildMatchFoundMessage } from '@/services/matchmaking';
 import { verifyMatchmakingTicket } from '@/lib/matchmaking-ticket';
 import type {
@@ -271,8 +272,6 @@ async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession)
   }
 }
 
-const DEV_BOT_USER_ID = '__dev_bot__';
-
 function isDevAutoBotEnabled() {
   const raw = process.env.MATCHING_DEV_AUTO_BOT?.trim().toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
@@ -282,7 +281,9 @@ async function tryMatchWithDevBot(
   context: ReturnType<typeof createServerContext>,
   identity: RuntimeSocketData,
 ) {
-  if (identity.userId === DEV_BOT_USER_ID) return null;
+  if (isDevBotUserId(identity.userId)) return null;
+
+  const humanEntry = await context.repositories.queue.findActiveByUserId(identity.userId);
 
   await context.services.queue.cancelQueue(DEV_BOT_USER_ID).catch(() => undefined);
   await context.services.queue.enterQueue({
@@ -290,6 +291,7 @@ async function tryMatchWithDevBot(
     displayName: '練習相手',
     connectionId: `dev_bot_${Date.now()}`,
     rating: identity.rating,
+    battleSetupId: humanEntry?.battleSetupId ?? undefined,
   });
 
   console.log('[matching_server] dev auto-bot entered queue for', identity.userId);
