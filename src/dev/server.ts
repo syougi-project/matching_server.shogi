@@ -115,7 +115,10 @@ export function startLocalDevServer(port = 3010) {
 
           if (trustedMessage.action === 'enter_queue') {
             try {
-              const match = await context.services.matchmaking.runOnce();
+              let match = await context.services.matchmaking.runOnce();
+              if (!match && isDevAutoBotEnabled()) {
+                match = await tryMatchWithDevBot(context, socket.data);
+              }
               if (match) {
                 runtime.matchIdByUserId.set(match.playerBlackUserId, match.matchId);
                 runtime.matchIdByUserId.set(match.playerWhiteUserId, match.matchId);
@@ -235,11 +238,9 @@ export function startLocalDevServer(port = 3010) {
 async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession) {
   const blackSocket = runtime.socketByUserId.get(match.playerBlackUserId);
   const whiteSocket = runtime.socketByUserId.get(match.playerWhiteUserId);
-  if (!blackSocket || !whiteSocket) {
-    console.warn('[matching_server] match created but websocket missing for broadcast', {
+  if (!blackSocket && !whiteSocket) {
+    console.warn('[matching_server] match created but no websocket available for broadcast', {
       matchId: match.matchId,
-      hasBlackSocket: Boolean(blackSocket),
-      hasWhiteSocket: Boolean(whiteSocket),
     });
     return;
   }
@@ -254,15 +255,45 @@ async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession)
       turn: match.game.turn,
       board: match.game.boardState,
       hands: match.game.handsState,
+      skillState: match.game.skillState,
       version: match.game.version,
       canonicalState: match.game.canonicalState,
     },
   };
 
-  blackSocket.send(JSON.stringify(blackFound));
-  whiteSocket.send(JSON.stringify(whiteFound));
-  blackSocket.send(JSON.stringify(started));
-  whiteSocket.send(JSON.stringify(started));
+  if (blackSocket) {
+    blackSocket.send(JSON.stringify(blackFound));
+    blackSocket.send(JSON.stringify(started));
+  }
+  if (whiteSocket) {
+    whiteSocket.send(JSON.stringify(whiteFound));
+    whiteSocket.send(JSON.stringify(started));
+  }
+}
+
+const DEV_BOT_USER_ID = '__dev_bot__';
+
+function isDevAutoBotEnabled() {
+  const raw = process.env.MATCHING_DEV_AUTO_BOT?.trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+async function tryMatchWithDevBot(
+  context: ReturnType<typeof createServerContext>,
+  identity: RuntimeSocketData,
+) {
+  if (identity.userId === DEV_BOT_USER_ID) return null;
+
+  await context.services.queue.cancelQueue(DEV_BOT_USER_ID).catch(() => undefined);
+  await context.services.queue.enterQueue({
+    userId: DEV_BOT_USER_ID,
+    displayName: '練習相手',
+    connectionId: `dev_bot_${Date.now()}`,
+    rating: identity.rating,
+  });
+
+  console.log('[matching_server] dev auto-bot entered queue for', identity.userId);
+  return context.services.matchmaking.runOnce();
 }
 
 async function broadcastToMatch(
