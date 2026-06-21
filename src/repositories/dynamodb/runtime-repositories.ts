@@ -11,6 +11,7 @@ import {
   isConditionalCheckFailed,
   putCommand,
   queryCommand,
+  scanCommand,
   updateCommand,
   deleteCommand,
   transactWriteCommand,
@@ -383,6 +384,23 @@ export class DynamoMatchRepository implements MatchRepository {
       }),
     );
     return result.Item ?? null;
+  }
+
+  async listExpiredReconnectMatches(limit = 25) {
+    const nowIso = new Date().toISOString();
+    const result = await this.options.client.send<{ Items?: MatchSession[] }>(
+      scanCommand({
+        TableName: this.options.tables.matches,
+        FilterExpression: '#status = :started AND attribute_exists(reconnectDeadlineAt) AND reconnectDeadlineAt <= :now',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':started': 'started',
+          ':now': nowIso,
+        },
+        Limit: Math.max(1, limit),
+      }),
+    );
+    return result.Items ?? [];
   }
 
   async updateGameIfVersion(matchId: string, expectedVersion: number, nextSession: MatchSession) {

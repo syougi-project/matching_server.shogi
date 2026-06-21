@@ -6,6 +6,11 @@ import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
 import { DEV_BOT_USER_ID, isDevBotUserId } from '@/lib/dev-bot';
+import { tryPlayDevBotMove } from '@/lib/dev-bot-autoplay';
+import {
+  cancelReconnectForfeitTimer,
+  scheduleReconnectForfeitTimer,
+} from '@/dev/reconnect-forfeit-timer';
 import { buildMatchFoundMessage } from '@/services/matchmaking';
 import { verifyMatchmakingTicket } from '@/lib/matchmaking-ticket';
 import type {
@@ -20,6 +25,7 @@ type RuntimeState = {
   userIdByConnectionId: Map<string, string>;
   socketByUserId: Map<string, ServerWebSocket<RuntimeSocketData>>;
   matchIdByUserId: Map<string, string>;
+  reconnectTimersByMatchId: Map<string, ReturnType<typeof setTimeout>>;
 };
 
 type RuntimeSocketData = {
@@ -32,10 +38,28 @@ type RuntimeSocketData = {
 
 export function startLocalDevServer(port = 3010) {
   const context = createServerContext();
+  if (!context.config.bffBaseUrl) {
+    console.warn(
+      '[matching_server] MATCHING_BFF_BASE_URL が未設定です。カスタムデッキは標準将棋盤になります。',
+    );
+  } else {
+    console.log('[matching_server] BFF battle setup:', context.config.bffBaseUrl);
+    if (process.env.MATCHING_USE_IN_MEMORY_CATALOG === 'true') {
+      console.log(
+        '[matching_server] MATCHING_USE_IN_MEMORY_CATALOG は設定されていますが、BFF 接続時は BFF 駒目録を使用します。',
+      );
+    }
+  }
+  if (isDevAutoBotEnabled()) {
+    console.warn(
+      '[matching_server] MATCHING_DEV_AUTO_BOT が有効です。相手不在時は CPU「練習相手」と自動マッチします。',
+    );
+  }
   const runtime: RuntimeState = {
     userIdByConnectionId: new Map(),
     socketByUserId: new Map(),
     matchIdByUserId: new Map(),
+    reconnectTimersByMatchId: new Map(),
   };
 
   const selectedPort = port > 0 ? port : pickPortCandidate();
@@ -85,6 +109,7 @@ export function startLocalDevServer(port = 3010) {
           try {
             const match = await context.services.gameCommand.reconnect(activeMatchId, userId, connectionId);
             runtime.matchIdByUserId.set(userId, match.matchId);
+            cancelReconnectForfeitTimer(runtime, match.matchId);
             socket.send(JSON.stringify(buildGameStateUpdatedMessage(match)));
             if (isBattleClockStarted(match)) {
               socket.send(JSON.stringify(buildBattleClockStartedMessage(match)));
@@ -135,22 +160,7 @@ export function startLocalDevServer(port = 3010) {
           if (trustedMessage.action === 'make_move' && response.type === 'game_state_updated') {
             const match = await context.repositories.matches.findById(response.matchId);
             if (match) {
-              await broadcastToOpponent(
-                runtime,
-                match,
-                trustedMessage.userId,
-                buildGameStateUpdatedMessage(match),
-              );
-              if (match.status === 'finished') {
-                await broadcastToMatch(runtime, match, {
-                  type: 'game_finished',
-                  matchId: match.matchId,
-                  status: 'finished',
-                  winnerUserId: match.winnerUserId,
-                  reason: match.endReason ?? 'king_capture',
-                });
-                await flushIntegrationOutbox(context);
-              }
+              await publishHumanMoveUpdates(runtime, context, match, trustedMessage.userId);
             }
             return;
           }
@@ -168,14 +178,26 @@ export function startLocalDevServer(port = 3010) {
             if (!response.clockStarted) return;
             const match = await context.repositories.matches.findById(response.matchId);
             if (!match) return;
-            const clockStarted = buildBattleClockStartedMessage(match);
-            await broadcastToMatch(runtime, match, clockStarted);
+            await broadcastToMatch(runtime, match, buildBattleClockStartedMessage(match));
+            const afterBot = await tryPlayDevBotMove(context, match);
+            if (afterBot) {
+              await publishDevBotMoveUpdates(runtime, context, afterBot);
+            }
           }
         },
         async close(socket) {
           const { connectionId, userId } = socket.data;
           runtime.userIdByConnectionId.delete(connectionId);
+
+          const currentSocket = runtime.socketByUserId.get(userId);
+          if (currentSocket !== socket) {
+            return;
+          }
           runtime.socketByUserId.delete(userId);
+
+          if (isDevBotUserId(userId)) {
+            return;
+          }
 
           const matchId = runtime.matchIdByUserId.get(userId);
           if (!matchId) {
@@ -213,6 +235,16 @@ export function startLocalDevServer(port = 3010) {
                 reconnectDeadlineAt: deadline,
               } satisfies WebSocketServerMessage),
             );
+            scheduleReconnectForfeitTimer(runtime, context, match, async (finished) => {
+              await broadcastToMatch(runtime, finished, {
+                type: 'game_finished',
+                matchId: finished.matchId,
+                status: 'finished',
+                winnerUserId: finished.winnerUserId,
+                reason: finished.endReason ?? 'disconnect',
+              });
+              await flushIntegrationOutbox(context);
+            });
           } catch {
             // Ignore close-time disconnect failures in local runtime.
           }
@@ -234,6 +266,59 @@ export function startLocalDevServer(port = 3010) {
     server,
     context,
   };
+}
+
+async function publishHumanMoveUpdates(
+  runtime: RuntimeState,
+  context: ReturnType<typeof createServerContext>,
+  match: MatchSession,
+  actorUserId: string,
+) {
+  await broadcastToOpponent(
+    runtime,
+    match,
+    actorUserId,
+    buildGameStateUpdatedMessage(match),
+  );
+  if (match.status === 'finished') {
+    await broadcastToMatch(runtime, match, {
+      type: 'game_finished',
+      matchId: match.matchId,
+      status: 'finished',
+      winnerUserId: match.winnerUserId,
+      reason: match.endReason ?? 'king_capture',
+    });
+    await flushIntegrationOutbox(context);
+    return;
+  }
+
+  const afterBot = await tryPlayDevBotMove(context, match);
+  if (afterBot) {
+    await publishDevBotMoveUpdates(runtime, context, afterBot);
+  }
+}
+
+async function publishDevBotMoveUpdates(
+  runtime: RuntimeState,
+  context: ReturnType<typeof createServerContext>,
+  match: MatchSession,
+) {
+  const humanUserId = isDevBotUserId(match.playerBlackUserId)
+    ? match.playerWhiteUserId
+    : match.playerBlackUserId;
+  runtime.socketByUserId
+    .get(humanUserId)
+    ?.send(JSON.stringify(buildGameStateUpdatedMessage(match)));
+  if (match.status === 'finished') {
+    await broadcastToMatch(runtime, match, {
+      type: 'game_finished',
+      matchId: match.matchId,
+      status: 'finished',
+      winnerUserId: match.winnerUserId,
+      reason: match.endReason ?? 'king_capture',
+    });
+    await flushIntegrationOutbox(context);
+  }
 }
 
 async function broadcastMatchStarted(runtime: RuntimeState, match: MatchSession) {

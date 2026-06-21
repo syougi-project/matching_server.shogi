@@ -35,9 +35,11 @@ export type ServerContextOverrides = {
 };
 
 function shouldUseInMemoryPieceCatalog(config: MatchingServerConfig): boolean {
+  // BFF が使える環境では PIECE_ インスタンス ID 付きデッキを解決するため BFF 目録を優先する
+  if (config.bffBaseUrl) return false;
   if (process.env.MATCHING_USE_IN_MEMORY_CATALOG === 'true') return true;
   if (process.env.CI === 'true') return true;
-  return !config.bffBaseUrl;
+  return true;
 }
 
 export function createServerContext(overrides: ServerContextOverrides = {}) {
@@ -59,14 +61,12 @@ export function createServerContext(overrides: ServerContextOverrides = {}) {
   const ruleSnapshotBuilder = new RuleSnapshotBuilder(pieceCatalog);
   const ruleEngine = new BasicRuleEngine();
   const eventPublisher = new BffEventPublisher(integrationEvents);
-  const battleSetupClient =
-    !useInMemoryCatalog && config.bffBaseUrl
-      ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
-      : null;
-  const matchResultClient =
-    !useInMemoryCatalog && config.bffBaseUrl
-      ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
-      : null;
+  const battleSetupClient = config.bffBaseUrl
+    ? new BffBattleSetupClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+    : null;
+  const matchResultClient = config.bffBaseUrl
+    ? new BffMatchResultClient(config.bffBaseUrl, config.bffInternalToken ?? null)
+    : null;
   const pvpRatingClient = BffPvpRatingClient.fromConfig(config);
   return {
     config,

@@ -32,6 +32,7 @@ export interface QueueRepository {
 export interface MatchRepository {
   save(session: MatchSession): Promise<void>;
   findById(matchId: string): Promise<MatchSession | null>;
+  listExpiredReconnectMatches(limit?: number): Promise<MatchSession[]>;
   updateGameIfVersion(
     matchId: string,
     expectedVersion: number,

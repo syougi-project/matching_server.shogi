@@ -165,6 +165,10 @@ export class MatchmakingService {
         : null;
     if (humanEntry && (isDevBotUserId(black.userId) || isDevBotUserId(white.userId))) {
       if (!this.battleSetupClient || !humanEntry.battleSetupId) {
+        console.warn('[matchmaking] dev-bot match without battle setup; using standard shogi board', {
+          ownerUserId: humanEntry.userId,
+          battleSetupId: humanEntry.battleSetupId,
+        });
         return this.ruleEngine.createInitialGame(ruleSnapshot);
       }
       try {

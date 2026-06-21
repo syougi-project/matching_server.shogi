@@ -11,12 +11,15 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { buildMatchStartedBroadcasts } from '@/server/matching-core';
 import { createWebSocketLambdaHandlers, type ApiGatewayWebSocketEvent } from '@/lambda/handlers';
 import type { MatchmakingRequestPublisher } from '@/integrations/matchmaking-request-publisher';
+import { buildGameFinishedMessage } from '@/server/handlers/ws-message';
+import { ReconnectTimeoutService } from '@/services/reconnect-timeout';
 import {
   DynamoConnectionRepository,
   DynamoIntegrationEventRepository,
@@ -94,7 +97,7 @@ export async function handler(
     case 'matchmaking':
       return runMatchmakingBatchWorker();
     case 'reconnect_timeout':
-      return { statusCode: 200, body: 'noop reconnect timeout worker' };
+      return runReconnectTimeoutWorker();
     case 'outbox':
       return runOutboxWorker();
     default:
@@ -107,6 +110,32 @@ async function runOutboxWorker(): Promise<LambdaResponse> {
   return {
     statusCode: result.failed > 0 ? 207 : 200,
     body: JSON.stringify(result),
+  };
+}
+
+async function runReconnectTimeoutWorker(): Promise<LambdaResponse> {
+  const service = new ReconnectTimeoutService(context.repositories.matches, context.services.gameCommand);
+  const finished = await service.processExpired();
+  const managementApi = createManagementApi();
+  let notified = 0;
+
+  for (const match of finished) {
+    const payload = JSON.stringify(buildGameFinishedMessage(match));
+    for (const connectionId of [match.playerBlackConnectionId, match.playerWhiteConnectionId]) {
+      if (!connectionId) continue;
+      try {
+        await managementApi.postToConnection({ connectionId, data: payload });
+        notified += 1;
+      } catch {
+        // Connection may already be gone after disconnect.
+      }
+    }
+  }
+
+  const outbox = await context.services.outboxWorker.runOnce();
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ finished: finished.length, notified, outbox }),
   };
 }
 
@@ -142,6 +171,8 @@ function createDocumentClient(client: any): DynamoDocumentClientLike {
           return await client.send(new UpdateCommand(command.input as any));
         case 'QueryCommand':
           return await client.send(new QueryCommand(command.input as any));
+        case 'ScanCommand':
+          return await client.send(new ScanCommand(command.input as any));
         case 'DeleteCommand':
           return await client.send(new DeleteCommand(command.input as any));
         case 'TransactWriteCommand':

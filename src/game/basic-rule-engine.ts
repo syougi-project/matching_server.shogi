@@ -293,6 +293,18 @@ export class BasicRuleEngine implements RuleEngine {
   }
 }
 
+export function pickLegalMoveForBot(
+  game: GameSnapshot,
+  rules: RuleSnapshot,
+  actorSide: PlayerSide,
+): MovePayload | null {
+  const state = parseGameState(game, rules);
+  const moves = generateLegalMoves(state, rules, actorSide);
+  if (moves.length === 0) return null;
+  const index = Math.floor(Math.random() * moves.length);
+  return toMovePayload(moves[index]!);
+}
+
 function createInitialBoardState(rules: RuleSnapshot): Record<string, string> {
   const board: Record<string, string> = {};
   for (const entry of STANDARD_INITIAL_LAYOUT) {

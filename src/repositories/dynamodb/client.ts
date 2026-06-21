@@ -15,6 +15,7 @@ export type DynamoCommand =
         | 'PutCommand'
         | 'UpdateCommand'
         | 'QueryCommand'
+        | 'ScanCommand'
         | 'DeleteCommand';
       input: DynamoCommandInput;
     }
@@ -43,6 +44,10 @@ export function updateCommand(input: DynamoCommandInput): DynamoCommand {
 
 export function queryCommand(input: DynamoCommandInput): DynamoCommand {
   return { kind: 'QueryCommand', input };
+}
+
+export function scanCommand(input: DynamoCommandInput): DynamoCommand {
+  return { kind: 'ScanCommand', input };
 }
 
 export function deleteCommand(input: DynamoCommandInput): DynamoCommand {

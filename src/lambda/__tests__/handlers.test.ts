@@ -75,7 +75,7 @@ describe('websocket lambda handlers', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  test('disconnect finishes active match and notifies the opponent', async () => {
+  test('disconnect notifies opponent and keeps the match alive during reconnect grace', async () => {
     const connections = new InMemoryConnectionRepository();
     const context = createServerContext({ repositories: { connections } });
     const posted: Array<{ connectionId: string; message: any }> = [];
@@ -133,16 +133,14 @@ describe('websocket lambda handlers', () => {
     const stored = await context.repositories.matches.findById(match!.matchId);
 
     expect(response.statusCode).toBe(200);
-    expect(stored?.status).toBe('finished');
-    expect(stored?.winnerUserId).toBe(match!.playerWhiteUserId);
+    expect(stored?.status).toBe('started');
+    expect(stored?.reconnectDeadlineAt).not.toBeNull();
     expect(posted).toContainEqual({
       connectionId: 'conn-2',
       message: {
-        type: 'game_finished',
+        type: 'opponent_disconnected',
         matchId: match!.matchId,
-        status: 'finished',
-        winnerUserId: match!.playerWhiteUserId,
-        reason: 'disconnect',
+        reconnectDeadlineAt: stored?.reconnectDeadlineAt,
       },
     });
   });

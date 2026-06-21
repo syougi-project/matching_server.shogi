@@ -1,7 +1,7 @@
 import { isDevBotUserId } from '@/lib/dev-bot';
 import { DomainError } from '@/lib/errors';
 import { isBattleClockStarted } from '@/lib/battle-clock';
-import { nowIso } from '@/lib/time';
+import { addSeconds, nowIso } from '@/lib/time';
 import type { MatchingServerConfig } from '@/lib/config';
 import type { RuleEngine } from '@/game/rule-engine';
 import type { MatchRepository } from '@/repositories/contracts';
@@ -128,21 +128,14 @@ export class GameCommandService {
     }
 
     const now = nowIso();
-    const winnerUserId =
-      side === 'black' ? match.playerWhiteUserId : match.playerBlackUserId;
-    const finished: MatchSession = {
+    const next: MatchSession = {
       ...match,
-      status: 'finished',
-      finishedAt: now,
-      winnerUserId,
-      endReason: 'disconnect',
       disconnectedAtBlack: side === 'black' ? now : match.disconnectedAtBlack,
       disconnectedAtWhite: side === 'white' ? now : match.disconnectedAtWhite,
-      reconnectDeadlineAt: null,
+      reconnectDeadlineAt: addSeconds(now, this.config.reconnectGraceSeconds),
     };
-    await this.matchRepository.save(finished);
-    await this.publishFinished(finished);
-    return finished;
+    await this.matchRepository.save(next);
+    return next;
   }
 
   async signalBattleReady(matchId: string, userId: string) {
@@ -202,17 +195,28 @@ export class GameCommandService {
 
   async abortExpiredReconnect(matchId: string) {
     const match = await this.requireMatch(matchId);
+    if (match.status !== 'started') return null;
     if (!match.reconnectDeadlineAt) return null;
     if (new Date(match.reconnectDeadlineAt).getTime() > Date.now()) return null;
-    const aborted: MatchSession = {
+
+    const disconnectedSide = sideForDisconnectedPlayer(match);
+    if (!disconnectedSide) return null;
+
+    const winnerUserId =
+      disconnectedSide === 'black' ? match.playerWhiteUserId : match.playerBlackUserId;
+    const finished: MatchSession = {
       ...match,
-      status: 'aborted',
+      status: 'finished',
       finishedAt: nowIso(),
-      endReason: 'disconnect_timeout',
+      winnerUserId,
+      endReason: 'disconnect',
+      reconnectDeadlineAt: null,
+      disconnectedAtBlack: null,
+      disconnectedAtWhite: null,
     };
-    await this.matchRepository.save(aborted);
-    await this.eventPublisher.publishMatchEvent(aborted, 'match.aborted');
-    return aborted;
+    await this.matchRepository.save(finished);
+    await this.publishFinished(finished);
+    return finished;
   }
 
   async findMatch(matchId: string) {
@@ -231,5 +235,14 @@ export class GameCommandService {
 function sideForUser(match: MatchSession, userId: string): PlayerSide | null {
   if (match.playerBlackUserId === userId) return 'black';
   if (match.playerWhiteUserId === userId) return 'white';
+  return null;
+}
+
+function sideForDisconnectedPlayer(match: MatchSession): PlayerSide | null {
+  if (match.disconnectedAtBlack && !match.disconnectedAtWhite) return 'black';
+  if (match.disconnectedAtWhite && !match.disconnectedAtBlack) return 'white';
+  if (match.disconnectedAtBlack && match.disconnectedAtWhite) {
+    return match.disconnectedAtBlack >= match.disconnectedAtWhite ? 'black' : 'white';
+  }
   return null;
 }

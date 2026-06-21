@@ -75,7 +75,7 @@ describe('GameCommandService', () => {
     expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
   });
 
-  test('disconnect finishes match and awards win to the opponent', async () => {
+  test('disconnect starts reconnect grace instead of finishing immediately', async () => {
     const context = createServerContext();
 
     await context.services.queue.enterQueue({
@@ -97,15 +97,13 @@ describe('GameCommandService', () => {
     );
     const pending = await context.repositories.integrationEvents.listPending();
 
-    expect(disconnected.status).toBe('finished');
-    expect(disconnected.winnerUserId).toBe(match!.playerWhiteUserId);
-    expect(disconnected.endReason).toBe('disconnect');
-    expect(disconnected.reconnectDeadlineAt).toBeNull();
+    expect(disconnected.status).toBe('started');
+    expect(disconnected.reconnectDeadlineAt).not.toBeNull();
     expect(disconnected.disconnectedAtBlack).not.toBeNull();
-    expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
+    expect(pending.some((event) => event.eventType === 'match.finished')).toBe(false);
   });
 
-  test('aborts expired reconnect and emits abort event', async () => {
+  test('finishes expired reconnect as disconnect forfeit and emits finished event', async () => {
     const context = createServerContext();
 
     await context.services.queue.enterQueue({
@@ -123,15 +121,17 @@ describe('GameCommandService', () => {
     if (match) match = await markBothBattleReady(context, match);
     await context.repositories.matches.save({
       ...match!,
+      disconnectedAtBlack: '2000-01-01T00:00:00.000Z',
       reconnectDeadlineAt: '2000-01-01T00:00:00.000Z',
     });
 
-    const aborted = await context.services.gameCommand.abortExpiredReconnect(match!.matchId);
+    const finished = await context.services.gameCommand.abortExpiredReconnect(match!.matchId);
     const pending = await context.repositories.integrationEvents.listPending();
 
-    expect(aborted?.status).toBe('aborted');
-    expect(aborted?.endReason).toBe('disconnect_timeout');
-    expect(pending.some((event) => event.eventType === 'match.aborted')).toBe(true);
+    expect(finished?.status).toBe('finished');
+    expect(finished?.endReason).toBe('disconnect');
+    expect(finished?.winnerUserId).toBe(match!.playerWhiteUserId);
+    expect(pending.some((event) => event.eventType === 'match.finished')).toBe(true);
   });
 
   test('applies a standard pawn move from the initial position', async () => {
