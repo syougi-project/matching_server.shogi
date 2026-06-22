@@ -141,7 +141,7 @@ export class GameCommandService {
   async signalBattleReady(matchId: string, userId: string) {
     const match = await this.requireMatch(matchId);
     if (match.status !== 'started') {
-      return { match, clockJustStarted: false };
+      return { match, clockJustStarted: false, resendClockStarted: false };
     }
 
     const side = sideForUser(match, userId);
@@ -151,7 +151,11 @@ export class GameCommandService {
 
     const alreadyReady = side === 'black' ? match.battleReadyBlack : match.battleReadyWhite;
     if (alreadyReady) {
-      return { match, clockJustStarted: false };
+      return {
+        match,
+        clockJustStarted: false,
+        resendClockStarted: isBattleClockStarted(match),
+      };
     }
 
     const next: MatchSession = {
@@ -172,7 +176,7 @@ export class GameCommandService {
       clockJustStarted = true;
     }
     await this.matchRepository.save(next);
-    return { match: next, clockJustStarted };
+    return { match: next, clockJustStarted, resendClockStarted: false };
   }
 
   async reconnect(matchId: string, userId: string, connectionId: string) {

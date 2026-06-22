@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from 'bun';
 import { createServerContext } from '@/server/context';
 import { getHealth } from '@/server/handlers/health';
-import { handleWebSocketMessage } from '@/server/handlers/ws-message';
+import { handleWebSocketCommand } from '@/server/handlers/ws-message';
 import type { MatchSession } from '@/types/domain';
 import { buildGameStateUpdatedMessage } from '@/server/handlers/ws-message';
 import { buildBattleClockStartedMessage, isBattleClockStarted } from '@/lib/battle-clock';
@@ -136,7 +136,12 @@ export function startLocalDevServer(port = 3010) {
           }
 
           const trustedMessage = applySocketIdentity(message, socket.data);
-          const response = await handleWebSocketMessage(context, socket.data.connectionId, trustedMessage);
+          const commandResult = await handleWebSocketCommand(
+            context,
+            socket.data.connectionId,
+            trustedMessage,
+          );
+          const response = commandResult.response;
           sendJson(socket, response);
 
           if (trustedMessage.action === 'enter_queue') {
@@ -175,14 +180,23 @@ export function startLocalDevServer(port = 3010) {
           }
 
           if (trustedMessage.action === 'signal_battle_ready' && response.type === 'battle_ready_ack') {
-            if (!response.clockStarted) return;
-            const match = await context.repositories.matches.findById(response.matchId);
-            if (!match) return;
-            await broadcastToMatch(runtime, match, buildBattleClockStartedMessage(match));
-            const afterBot = await tryPlayDevBotMove(context, match);
-            if (afterBot) {
-              await publishDevBotMoveUpdates(runtime, context, afterBot);
+            if (!commandResult.match) return;
+            if (response.clockStarted) {
+              await broadcastToMatch(
+                runtime,
+                commandResult.match,
+                buildBattleClockStartedMessage(commandResult.match),
+              );
+              const afterBot = await tryPlayDevBotMove(context, commandResult.match);
+              if (afterBot) {
+                await publishDevBotMoveUpdates(runtime, context, afterBot);
+              }
+              return;
             }
+            if (commandResult.resendClockStarted) {
+              sendJson(socket, buildBattleClockStartedMessage(commandResult.match));
+            }
+            return;
           }
         },
         async close(socket) {

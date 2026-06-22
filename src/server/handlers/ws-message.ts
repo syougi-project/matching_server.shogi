@@ -8,6 +8,7 @@ import type { GameStateUpdatedMessage } from '@/types/protocol';
 export type WebSocketCommandResult = {
   response: WebSocketServerMessage;
   match: MatchSession | null;
+  resendClockStarted?: boolean;
 };
 
 export function buildGameStateUpdatedMessage(match: MatchSession): GameStateUpdatedMessage {
@@ -104,10 +105,8 @@ export async function handleWebSocketCommand(
         };
       }
       case 'signal_battle_ready': {
-        const { match, clockJustStarted } = await context.services.gameCommand.signalBattleReady(
-          message.matchId,
-          message.userId,
-        );
+        const { match, clockJustStarted, resendClockStarted } =
+          await context.services.gameCommand.signalBattleReady(message.matchId, message.userId);
         return {
           response: {
             type: 'battle_ready_ack',
@@ -116,6 +115,7 @@ export async function handleWebSocketCommand(
             clockStarted: clockJustStarted,
           },
           match,
+          resendClockStarted,
         };
       }
       default: {

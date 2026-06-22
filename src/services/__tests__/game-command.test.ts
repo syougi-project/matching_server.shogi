@@ -971,5 +971,12 @@ describe('GameCommandService', () => {
     );
     expect(secondReady.clockJustStarted).toBe(true);
     expect(secondReady.match.turnClockStartedAt).not.toBeNull();
+
+    const resend = await context.services.gameCommand.signalBattleReady(
+      match!.matchId,
+      match!.playerBlackUserId,
+    );
+    expect(resend.clockJustStarted).toBe(false);
+    expect(resend.resendClockStarted).toBe(true);
   });
 });

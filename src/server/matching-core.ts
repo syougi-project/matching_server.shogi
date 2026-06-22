@@ -22,7 +22,11 @@ export class MatchingCore {
   ) {}
 
   async handleClientMessage(connectionId: string, message: WebSocketClientMessage) {
-    const { response, match } = await handleWebSocketCommand(this.context, connectionId, message);
+    const { response, match, resendClockStarted } = await handleWebSocketCommand(
+      this.context,
+      connectionId,
+      message,
+    );
     const broadcasts: Array<{ userId: string; message: WebSocketServerMessage }> = [];
 
     if (message.action === 'enter_queue') {
@@ -61,10 +65,14 @@ export class MatchingCore {
     }
 
     if (message.action === 'signal_battle_ready' && response.type === 'battle_ready_ack') {
-      if (match && response.clockStarted) {
+      if (match && (response.clockStarted || resendClockStarted)) {
         const clockStarted = buildBattleClockStartedMessage(match);
-        broadcasts.push({ userId: match.playerBlackUserId, message: clockStarted });
-        broadcasts.push({ userId: match.playerWhiteUserId, message: clockStarted });
+        if (response.clockStarted) {
+          broadcasts.push({ userId: match.playerBlackUserId, message: clockStarted });
+          broadcasts.push({ userId: match.playerWhiteUserId, message: clockStarted });
+        } else {
+          broadcasts.push({ userId: message.userId, message: clockStarted });
+        }
       }
       return { response, broadcasts, match };
     }
