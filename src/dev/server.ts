@@ -173,7 +173,7 @@ export function startLocalDevServer(port = 3010) {
           if (trustedMessage.action === 'resign' && response.type === 'game_finished') {
             const match = await context.repositories.matches.findById(response.matchId);
             if (match) {
-              await broadcastToOpponent(runtime, match, trustedMessage.userId, response);
+              await broadcastToMatch(runtime, match, response);
               await flushIntegrationOutbox(context);
             }
             return;

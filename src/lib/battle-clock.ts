@@ -1,6 +1,6 @@
 import type { MatchSession } from '@/types/domain';
 
-export const ONLINE_PVP_TURN_SECONDS = 30;
+export const ONLINE_PVP_TURN_SECONDS = 60;
 
 export function isBattleClockStarted(match: MatchSession): boolean {
   return match.turnClockStartedAt != null;

@@ -53,6 +53,32 @@ describe('SHOP_SO run forward two-step', () => {
 
     expect(result.ok).toBe(false);
   });
+
+  test('captures enemy king on the first forward square', () => {
+    const rules = createRunRules();
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game: {
+        boardState: {
+          '5i': 'black:OU',
+          '5e': 'black:PIECE_SHOP_SO',
+          '5d': 'white:OU',
+        },
+        handsState: { black: {}, white: {} },
+        skillState: emptySkillState(),
+        turn: 'black',
+        moveCount: 0,
+        version: 1,
+      },
+      move: { from: '5e', to: '5d', piece: 'SHOP_SO', promote: false, drop: false },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.finished?.reason).toBe('king_capture');
+    expect(result.finished?.winnerSide).toBe('black');
+  });
 });
 
 function emptySkillState() {

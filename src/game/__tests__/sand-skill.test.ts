@@ -40,8 +40,47 @@ describe('SAND linked movement', () => {
     expect(result.nextGame.boardState['5d']).toBe('black:SAND');
     expect(result.nextGame.boardState['6d']).toBe('black:SAND');
     expect(result.nextGame.boardState['4d']).toBeUndefined();
+    expect(result.nextGame.boardState['5c']).toBeUndefined();
+    expect(result.nextGame.boardState['6c']).toBeUndefined();
     expect(result.nextGame.boardState['5e']).toBeUndefined();
     expect(result.nextGame.boardState['6e']).toBeUndefined();
+  });
+
+  test('moves only one step for leader and linked ally in diagonal setup', () => {
+    const rules = createRules();
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '6d': 'black:SAND',
+        '5e': 'black:SAND',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: {
+        board_hazards: [],
+        board_arrow_tiles: [],
+        movement_modifiers: [],
+        piece_statuses: [],
+        piece_defenses: [],
+      },
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '5d', piece: 'SAND', promote: false, drop: false },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['5d']).toBe('black:SAND');
+    expect(result.nextGame.boardState['6c']).toBe('black:SAND');
+    expect(result.nextGame.boardState['4d']).toBeUndefined();
+    expect(result.nextGame.boardState['6d']).toBeUndefined();
   });
 });
 

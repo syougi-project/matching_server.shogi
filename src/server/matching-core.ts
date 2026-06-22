@@ -55,11 +55,8 @@ export class MatchingCore {
 
     if (message.action === 'resign' && response.type === 'game_finished') {
       if (match) {
-        const opponentUserId =
-          message.userId === match.playerBlackUserId
-            ? match.playerWhiteUserId
-            : match.playerBlackUserId;
-        broadcasts.push({ userId: opponentUserId, message: response });
+        broadcasts.push({ userId: match.playerBlackUserId, message: response });
+        broadcasts.push({ userId: match.playerWhiteUserId, message: response });
       }
       return { response, broadcasts, match };
     }

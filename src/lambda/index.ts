@@ -121,10 +121,11 @@ async function runReconnectTimeoutWorker(): Promise<LambdaResponse> {
 
   for (const match of finished) {
     const payload = JSON.stringify(buildGameFinishedMessage(match));
-    for (const connectionId of [match.playerBlackConnectionId, match.playerWhiteConnectionId]) {
-      if (!connectionId) continue;
+    for (const userId of [match.playerBlackUserId, match.playerWhiteUserId]) {
+      const connection = await connections.findByUserId(userId);
+      if (!connection || connection.status !== 'connected') continue;
       try {
-        await managementApi.postToConnection({ connectionId, data: payload });
+        await managementApi.postToConnection({ connectionId: connection.connectionId, data: payload });
         notified += 1;
       } catch {
         // Connection may already be gone after disconnect.

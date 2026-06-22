@@ -2012,22 +2012,27 @@ function moveAdjacentAllySandWithLeader(context: SkillContext) {
   const deltaRow = to.row - from.row;
   const deltaCol = to.col - from.col;
   if (deltaRow === 0 && deltaCol === 0) return false;
-  let moved = false;
-  // 着手駒は既に to にいるため、連携対象は to 周囲の味方砂のみ（from 基準だと着手駒を二重移動させる）
+  // 着手駒は既に to にいるため、連携対象は to 周囲の味方砂のみ（from 基準だと着手駒を二重移動させる）。
+  // app.shogi と同様、移動対象を先に列挙してから一括反映する（逐次 forEachAdjacent だと連携砂が二重移動しうる）。
+  const linkedSources: Array<{ source: string; ally: InternalPiece; row: number; col: number }> = [];
   forEachAdjacent(to, (row, col) => {
     const source = formatSquare(row, col);
     const ally = context.board.get(source);
     if (!ally || ally.side !== context.actorSide || canonicalPieceCode(ally.code) !== 'SAND') return;
+    linkedSources.push({ source, ally, row, col });
+  });
+  let moved = false;
+  for (const { source, ally, row, col } of linkedSources) {
     const destRow = row + deltaRow;
     const destCol = col + deltaCol;
-    if (!isInsideBoard(destRow, destCol)) return;
+    if (!isInsideBoard(destRow, destCol)) continue;
     const dest = formatSquare(destRow, destCol);
-    if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) return;
+    if (context.board.has(dest) || isCellBlockedByHazard(context.skillState, destRow, destCol)) continue;
     context.board.delete(source);
     context.board.set(dest, ally);
     moveAttachedSkillState(context.skillState, ally.side, source, dest);
     moved = true;
-  });
+  }
   return moved;
 }
 
