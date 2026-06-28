@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ci.yml"
-      - ".github/workflows/deploy-sandbox.yml"
+      - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/deploy-dev.yml"
       - "src/**"
       - "scripts/**"
       - "infra/terraform/**"
@@ -14,7 +15,8 @@ on:
   push:
     paths:
       - ".github/workflows/ci.yml"
-      - ".github/workflows/deploy-sandbox.yml"
+      - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/deploy-dev.yml"
       - "src/**"
       - "scripts/**"
       - "infra/terraform/**"

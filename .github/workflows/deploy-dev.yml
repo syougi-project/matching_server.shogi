@@ -1,10 +1,12 @@
-name: Deploy Sandbox
+name: Deploy Dev
 
 on:
   workflow_dispatch:
   pull_request:
+    branches:
+      - dev
     paths:
-      - ".github/workflows/deploy-sandbox.yml"
+      - ".github/workflows/deploy-dev.yml"
       - "src/**"
       - "scripts/**"
       - "infra/terraform/**"
@@ -13,9 +15,9 @@ on:
       - "tsconfig.json"
   push:
     branches:
-      - main
+      - dev
     paths:
-      - ".github/workflows/deploy-sandbox.yml"
+      - ".github/workflows/deploy-dev.yml"
       - "src/**"
       - "scripts/**"
       - "infra/terraform/**"
@@ -24,7 +26,7 @@ on:
       - "tsconfig.json"
 
 concurrency:
-  group: deploy-sandbox-${{ github.ref }}
+  group: deploy-dev-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -33,6 +35,9 @@ permissions:
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
   TF_IN_AUTOMATION: "true"
+  TF_VAR_name_prefix: matching-server-shogi-dev
+  TF_VAR_lambda_function_name: matching-server-shogi-dev-api
+  TF_VAR_stage_name: dev
 
 jobs:
   plan:
@@ -72,16 +77,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra/terraform
-        run: terraform init
-
-      - name: Import Existing Terraform Resources
-        env:
-          TF_VAR_aws_region: ${{ env.AWS_REGION }}
-          TF_VAR_lambda_zip_path: ../../dist/lambda.zip
-          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
-          TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
-          TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-        run: ./scripts/terraform-import-existing.sh
+        run: terraform init -backend-config="key=matching-server-shogi/dev/terraform.tfstate"
 
       - name: Terraform Validate
         working-directory: infra/terraform
@@ -92,7 +88,7 @@ jobs:
         env:
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_lambda_zip_path: ../../dist/lambda.zip
-          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
+          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_dev_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
         run: terraform plan -no-color
@@ -101,8 +97,8 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: plan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: sandbox
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    environment: dev
 
     steps:
       - name: Checkout
@@ -131,23 +127,14 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra/terraform
-        run: terraform init
-
-      - name: Import Existing Terraform Resources
-        env:
-          TF_VAR_aws_region: ${{ env.AWS_REGION }}
-          TF_VAR_lambda_zip_path: ../../dist/lambda.zip
-          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
-          TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
-          TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
-        run: ./scripts/terraform-import-existing.sh
+        run: terraform init -backend-config="key=matching-server-shogi/dev/terraform.tfstate"
 
       - name: Terraform Apply
         working-directory: infra/terraform
         env:
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_lambda_zip_path: ../../dist/lambda.zip
-          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_bff_base_url }}
+          TF_VAR_bff_base_url: ${{ secrets.TF_VAR_dev_bff_base_url }}
           TF_VAR_matching_bff_internal_token: ${{ secrets.TF_VAR_matching_bff_internal_token }}
           TF_VAR_matching_ticket_secret: ${{ secrets.TF_VAR_matching_ticket_secret }}
         run: terraform apply -auto-approve

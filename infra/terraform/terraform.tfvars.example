@@ -3,6 +3,7 @@ aws_region  = "ap-northeast-1"
 
 # Build artifact produced by your Lambda bundling step.
 lambda_zip_path = "../../dist/lambda.zip"
+lambda_function_name = "matching-server-shogi-dev-api"
 lambda_runtime  = "nodejs22.x"
 lambda_handler  = "index.handler"
 
