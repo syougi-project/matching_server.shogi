@@ -15,6 +15,12 @@ variable "lambda_zip_path" {
   description = "Path to the built matching server Lambda zip artifact."
 }
 
+variable "lambda_function_name" {
+  type        = string
+  description = "Lambda function name."
+  default     = "manakana-shogi-matching-api"
+}
+
 variable "lambda_runtime" {
   type        = string
   description = "Lambda runtime."

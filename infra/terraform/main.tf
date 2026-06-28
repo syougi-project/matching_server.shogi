@@ -14,7 +14,7 @@ provider "aws" {
 }
 
 locals {
-  lambda_function = "manakana-shogi-matching-api"
+  lambda_function = var.lambda_function_name
 
   tables = {
     connections = {

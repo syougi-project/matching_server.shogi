@@ -13,12 +13,16 @@ DynamoDB is intentionally used only for temporary runtime state. Durable records
 
 ```bash
 bun run tf:sync-env
-terraform init
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+cd infra/terraform
+terraform init -reconfigure -backend-config="key=matching-server-shogi/dev/terraform.tfstate"
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
-Copy `terraform.tfvars.example` to `terraform.tfvars` and set:
+The example variables target dev. Dev shares the project-level BFF values with production, but uses a separate state key, resource prefix, Lambda name, and API Gateway stage.
+
+Set the following value in `terraform.tfvars` before planning:
 
 - `lambda_zip_path`
 
