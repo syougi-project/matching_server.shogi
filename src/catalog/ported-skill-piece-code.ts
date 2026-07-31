@@ -27,6 +27,7 @@ const CHAR_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   風: 'WIND',
   苔: 'MOSS',
   魚: 'FISH',
+  雲: 'CLOUD',
   虹: 'RAINBOW',
   毒: 'POISON',
   沼: 'SWAMP',
@@ -85,6 +86,8 @@ const OPAQUE_HEX_TO_SKILL_CODE: Readonly<Record<string, string>> = {
   'C4AEB81F3634': 'GIANT',
   '6D4AFA9CDF1C': 'SATORI',
   'CA16911978FF': 'HEART',
+  '16EDE27B8EFF': 'CLOUD',
+  '5A24E1332FF7': 'PEAK',
 };
 
 function resolveOpaqueHexSkillCode(code: string): string | null {

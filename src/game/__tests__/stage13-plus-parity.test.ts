@@ -48,6 +48,79 @@ describe('stage13+ online skill parity', () => {
     expect(enemyCapture.ok).toBe(false);
   });
 
+  test('cloud allied capture normalizes opaque piece id into hand', () => {
+    const opaque = 'PIECE_E9E01AAC8E';
+    const rules = createRules(['CLOUD', 'FU', 'OU', 'NAKU']);
+    rules.piecesByCode[opaque] = {
+      pieceCode: opaque,
+      canonicalCode: opaque,
+      sfenCode: opaque,
+      char: '鳴',
+      name: '鳴',
+      skill: '',
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      moveRules: [],
+      moveConstraints: null,
+      promotable: false,
+      skillDefinitionsV2: null,
+    };
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:CLOUD',
+        '5f': `black:${opaque}`,
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '5f', piece: 'CLOUD' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['5f']).toBe('black:CLOUD');
+    expect(result.nextGame.handsState.black[opaque]).toBeUndefined();
+    expect(result.nextGame.handsState.black.NAKU).toBe(1);
+  });
+
+  test('cloud allied capture ignores phantom evade on ally', () => {
+    Math.random = () => 0.1;
+    const rules = createRules(['CLOUD', 'PHANTOM', 'OU']);
+    rules.skillDefinitions = mergeSkillDefinitions(rules.skillDefinitions);
+    const game: GameSnapshot = {
+      boardState: {
+        '5i': 'black:OU',
+        '5a': 'white:OU',
+        '5e': 'black:CLOUD',
+        '5f': 'black:PHANTOM',
+      },
+      handsState: { black: {}, white: {} },
+      skillState: emptySkillState(),
+      turn: 'black',
+      moveCount: 0,
+      version: 1,
+    };
+
+    const result = engine.applyMove({
+      actorSide: 'black',
+      rules,
+      game,
+      move: { from: '5e', to: '5f', piece: 'CLOUD' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextGame.boardState['5f']).toBe('black:CLOUD');
+    expect(result.nextGame.handsState.black.PHANTOM).toBe(1);
+  });
+
   test('phantom evades capture with seeded random', () => {
     Math.random = () => 0.1;
     const rules = createRules(['PHANTOM', 'GI', 'OU']);
@@ -175,6 +248,7 @@ function createPiece(code: string): PieceDefinition {
     HOUSE: '家',
     PEOPLE: '民',
     MIST: '霧',
+    NAKU: '鳴',
     FU: '歩',
     GI: '銀',
     OU: '王',

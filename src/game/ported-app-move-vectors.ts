@@ -254,6 +254,19 @@ export function resolveIntrinsicPortedMoveVectors(definition: PieceDefinition): 
   if (definitionMatchesAliases(definition, ['HI', '飛'])) {
     return cloneVectors(ROOK_ORTHOGONAL_MOVE_VECTORS);
   }
+  // 鳳: 前後左右に何マスでも + 斜め1マス（龍王相当）。BFF カタログが前進1マスのみでも補正する。
+  if (
+    definitionMatchesAliases(definition, [
+      'HOO',
+      '鳳',
+      'phoenix',
+      'PHOENIX',
+      '4C5084DE2FAD',
+      'PIECE_SHOGI_HOO',
+    ])
+  ) {
+    return cloneVectors(DRAGON_KING_MOVE_VECTORS);
+  }
   if (definitionMatchesAliases(definition, ['KA', '角'])) {
     return cloneVectors(BISHOP_DIAGONAL_MOVE_VECTORS);
   }

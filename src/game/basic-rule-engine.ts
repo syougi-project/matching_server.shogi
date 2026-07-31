@@ -416,6 +416,8 @@ function generateLegalMoves(
   rules: RuleSnapshot,
   side: PlayerSide,
 ): NormalizedMove[] {
+  // 初期配置や wire 再同期直後でも峰オーラを反映する。
+  applyPassiveSkillAuras(state.skillState, state.board, rules);
   const moves: NormalizedMove[] = [];
   const convexFollowup = activeFollowupCellForSide(state.skillState, side, 'convex_followup');
   const otsuFollowup = activeFollowupCellForSide(state.skillState, side, 'otsu_followup');
@@ -924,6 +926,7 @@ function generateSlidingTargetsForPattern(
       }
       if (occupant) {
         if (occupant.code === 'OU') break;
+        if (isCloudAlliedCaptureForbiddenPiece(occupant, rules)) break;
         if (isCaptureBlocked(skillState, occupant, square)) break;
         targets.push({ row, col });
         break;
@@ -947,7 +950,25 @@ function generateSlidingTargetsForPattern(
 
 function isCloudMover(definition: PieceDefinition): boolean {
   const code = resolveGamePieceCode(definition);
-  return code === 'CLOUD' || definition.char === '雲';
+  const raw = definition.pieceCode.toUpperCase();
+  return (
+    code === 'CLOUD' ||
+    definition.char === '雲' ||
+    raw.includes('CLOUD') ||
+    raw.includes('16EDE27B8EFF')
+  );
+}
+
+function isCloudAlliedCaptureForbiddenPiece(
+  piece: InternalPiece,
+  rules: RuleSnapshot,
+): boolean {
+  if (piece.code === 'OU') return true;
+  const def = resolveDef(rules, piece);
+  const gameCode = resolveGamePieceCode(def);
+  if (gameCode === 'OU' || gameCode === 'A' || gameCode === 'AH') return true;
+  const char = def.char.trim();
+  return char === '王' || char === '玉' || char === 'あ';
 }
 
 /** 砲(HOU): 直線上の空マスへ移動、または1枚挟んで敵を取る */
@@ -1286,35 +1307,49 @@ function applyMoveUnchecked(
         }
       }
       if (!combatAbortedMove && capturedPiece && capturedPiece.code !== 'OU') {
-        const holySwordEvade = tryHolySwordEvadeCapture({
-          board,
-          rules,
-          capturedPiece,
-          captureSquare: move.to,
-          formatSquare,
-          parseSquare,
-        });
+        const captureOwnPiece = capturedPiece.side === actorSide;
+        if (
+          captureOwnPiece &&
+          isCloudAlliedCaptureForbiddenPiece(capturedPiece, rules)
+        ) {
+          throw new Error('CLOUD cannot capture allied king or boss piece');
+        }
+        // 味方捕獲（雲）では幻・剣・朧の回避を適用しない（app.shogi と同じ）。
+        const holySwordEvade = captureOwnPiece
+          ? null
+          : tryHolySwordEvadeCapture({
+              board,
+              rules,
+              capturedPiece,
+              captureSquare: move.to,
+              formatSquare,
+              parseSquare,
+            });
         if (holySwordEvade) {
           board.set(holySwordEvade, capturedPiece);
           moveAttachedSkillState(skillState, capturedPiece.side, move.to, holySwordEvade);
           capturedPiece = null;
           holySwordEvadedThisMove = true;
         } else {
-          const oboroEvade = tryOboroEvadeCapture({
-            board,
-            rules,
-            capturedPiece,
-            captureSquare: move.to,
-            formatSquare,
-            parseSquare,
-            isInsideBoard,
-          });
+          const oboroEvade = captureOwnPiece
+            ? null
+            : tryOboroEvadeCapture({
+                board,
+                rules,
+                capturedPiece,
+                captureSquare: move.to,
+                formatSquare,
+                parseSquare,
+                isInsideBoard,
+              });
           if (oboroEvade) {
             board.set(oboroEvade, capturedPiece);
             moveAttachedSkillState(skillState, capturedPiece.side, move.to, oboroEvade);
             capturedPiece = null;
           } else {
-            const evadeSquare = tryPhantomEvadeCapture(board, rules, skillState, capturedPiece, capturePos);
+            const evadeSquare = captureOwnPiece
+              ? null
+              : tryPhantomEvadeCapture(board, rules, skillState, capturedPiece, capturePos);
           if (evadeSquare) {
             board.set(evadeSquare, capturedPiece);
             moveAttachedSkillState(skillState, capturedPiece.side, move.to, evadeSquare);
@@ -1341,18 +1376,20 @@ function applyMoveUnchecked(
               actorSide,
               capturedPieceToHandCode(rules, capturedPiece),
             );
-            applyCapturedVictimEffects({
-              board,
-              rules,
-              skillState,
-              actorSide,
-              capturedPiece,
-              captureSquare: move.to,
-              moverSquare: move.to,
-              parseSquare,
-              formatSquare,
-              isInsideBoard,
-            });
+            if (!captureOwnPiece) {
+              applyCapturedVictimEffects({
+                board,
+                rules,
+                skillState,
+                actorSide,
+                capturedPiece,
+                captureSquare: move.to,
+                moverSquare: move.to,
+                parseSquare,
+                formatSquare,
+                isInsideBoard,
+              });
+            }
           }
         }
         }
@@ -1542,13 +1579,14 @@ function applyMoveUnchecked(
       skillTriggered = true;
     }
   }
-  applyPassiveSkillAuras(skillState, board, rules);
   applyMutantReverts(board);
   skillState.movement_modifiers = pruneDanceMovementModifiersNotAdjacentToMai(
     skillState.movement_modifiers,
     board,
   );
   tickSkillStateDurations(skillState);
+  // 峰などの常時オーラは tick 後に再適用（remaining=1 だと同着手で即消える）。
+  applyPassiveSkillAuras(skillState, board, rules);
   applyDeathCurseExpirations({ board, skillState });
 
   let grantsConvexFollowup = false;
@@ -3072,19 +3110,21 @@ function applyPassiveSkillAuras(skillState: SkillState, board: InternalBoard, ru
   });
   const peakSides = new Set<PlayerSide>();
   for (const piece of board.values()) {
-    if (canonicalPieceCode(piece.code) === 'PEAK') peakSides.add(piece.side);
+    if (isPeakPiece(piece, rules)) peakSides.add(piece.side);
   }
   if (peakSides.size > 0) {
     for (const [square, piece] of board.entries()) {
       if (!peakSides.has(opposite(piece.side))) continue;
       if (piece.code === 'OU' || STANDARD_CODES.has(canonicalPieceCode(piece.code))) continue;
+      if (!isSpecialTenPlusPieceForPeak(piece, rules)) continue;
       const { row, col } = parseSquare(square);
       skillState.piece_statuses.push({
         row,
         col,
         side: piece.side,
         status_type: 'peak_lock',
-        remaining_turns: 1,
+        // tick されても消えないよう常時扱い（盤上の峰で毎手再計算される）
+        remaining_turns: 999,
       });
     }
   }
@@ -3096,6 +3136,167 @@ function applyPassiveSkillAuras(skillState: SkillState, board: InternalBoard, ru
     parseSquare,
   });
 }
+
+function isPeakPiece(piece: InternalPiece, rules: RuleSnapshot): boolean {
+  const def = resolveDef(rules, piece);
+  const code = canonicalPieceCode(piece.code);
+  const raw = (piece.code ?? '').toUpperCase();
+  const char = (def?.char ?? '').trim();
+  return (
+    code === 'PEAK' ||
+    char === '峰' ||
+    raw.includes('PEAK') ||
+    raw.includes('5A24E1332FF7') ||
+    (def != null && resolveGamePieceCode(def) === 'PEAK')
+  );
+}
+
+/** app.shogi isSpecialTenPlusPiece と同趣旨（画数10以上の特殊駒）。 */
+function isSpecialTenPlusPieceForPeak(piece: InternalPiece, rules: RuleSnapshot): boolean {
+  const code = canonicalPieceCode(piece.code);
+  if (code === 'OU' || STANDARD_CODES.has(code)) return false;
+  const def = resolveDef(rules, piece);
+  const char = (def?.char ?? '').trim();
+  if (char === '王' || char === '玉') return false;
+  const strokes = PEAK_SPECIAL_STROKE_COUNTS[char];
+  if (strokes != null) return strokes >= 10;
+  const byCode = PEAK_SPECIAL_CODE_STROKE_COUNTS[code];
+  if (byCode != null) return byCode >= 10;
+  // 画数不明の特殊駒はロックしない（app.shogi と同じ）。
+  return false;
+}
+
+const PEAK_SPECIAL_STROKE_COUNTS: Readonly<Record<string, number>> = {
+  忍: 7,
+  影: 15,
+  砲: 10,
+  竜: 10,
+  龍: 16,
+  鳳: 14,
+  炎: 8,
+  火: 4,
+  水: 4,
+  波: 8,
+  木: 4,
+  葉: 12,
+  光: 6,
+  星: 9,
+  闇: 13,
+  魔: 21,
+  銅: 14,
+  鉄: 13,
+  錫: 16,
+  鉛: 13,
+  宝: 8,
+  電: 13,
+  雷: 13,
+  時: 10,
+  氷: 5,
+  雪: 11,
+  砂: 9,
+  風: 9,
+  苔: 8,
+  魚: 11,
+  雲: 12,
+  虹: 9,
+  毒: 8,
+  沼: 8,
+  あ: 3,
+  牢: 7,
+  柵: 9,
+  嶺: 17,
+  峰: 10,
+  山: 3,
+  鏡: 19,
+  映: 9,
+  幻: 4,
+  霧: 19,
+  岩: 8,
+  鉱: 13,
+  墓: 13,
+  霊: 15,
+  月: 4,
+  舟: 6,
+  機: 16,
+  歯: 15,
+  家: 10,
+  民: 5,
+  畑: 9,
+  泉: 9,
+  辰: 7,
+  実: 8,
+  異: 11,
+  轟: 21,
+  犇: 16,
+  礼: 5,
+  聖: 13,
+  悟: 10,
+  心: 4,
+  鬱: 29,
+  乙: 1,
+  薔: 16,
+  菊: 11,
+  桜: 10,
+  爆: 19,
+  煽: 14,
+  逸: 11,
+  進: 11,
+  閹: 16,
+  膠: 15,
+  焼: 12,
+  煮: 12,
+  陽: 12,
+  陰: 11,
+  豚: 11,
+  鶏: 21,
+  銭: 14,
+  財: 10,
+  鳴: 14,
+  種: 14,
+  麒: 19,
+  舞: 14,
+  剣: 10,
+  銃: 14,
+  鎧: 18,
+  書: 10,
+  滝: 13,
+  禽: 13,
+  獣: 16,
+  淵: 11,
+  病: 10,
+  魂: 14,
+  朧: 20,
+  無: 12,
+};
+
+const PEAK_SPECIAL_CODE_STROKE_COUNTS: Readonly<Record<string, number>> = {
+  MIRROR: 19,
+  REFLECTION: 9,
+  PHANTOM: 4,
+  MIST: 19,
+  CLOUD: 12,
+  PEAK: 10,
+  RIDGE: 17,
+  DEMON: 21,
+  MAK: 21,
+  IRON: 13,
+  TIN: 16,
+  COPPER: 14,
+  TREASURE: 8,
+  BIGNOISE: 21,
+  BULL: 16,
+  KIRIN: 19,
+  NAKU: 14,
+  TANE: 14,
+  MAI: 14,
+  WATERFALL: 13,
+  BIRD: 13,
+  BEAST: 16,
+  HOLY_SWORD: 10,
+  GUN: 14,
+  ARMOR: 18,
+  BOOK: 10,
+};
 
 function applyMutantReverts(board: InternalBoard) {
   for (const [square, piece] of board.entries()) {
@@ -3494,8 +3695,38 @@ const PROMOTED_CAPTURE_TO_HAND_CODE: Record<string, string> = {
 
 function capturedPieceToHandCode(rules: RuleSnapshot, piece: InternalPiece): string {
   let code = resolveGamePieceCodeFromRules(rules, piece.code) ?? piece.code.trim().toUpperCase();
+  const def = resolveDef(rules, piece);
+  if (def?.char) {
+    const byChar = resolveGamePieceCode(def);
+    if (
+      byChar &&
+      byChar !== def.pieceCode.trim().toUpperCase() &&
+      !/^PIECE_[0-9A-F]{8,}$/i.test(byChar)
+    ) {
+      code = byChar;
+    }
+  }
   if (piece.promoted) {
     code = PROMOTED_CAPTURE_TO_HAND_CODE[code] ?? code;
+  }
+  // opaque id のまま手駒キーにしない（クライアントで非表示＝消滅に見える）。
+  if (/^PIECE_[0-9A-F]{8,}$/i.test(code) && def?.char) {
+    const trimmedChar = def.char.trim();
+    const catalogMatch = Object.values(rules.piecesByCode).find((entry) => {
+      if (entry.char.trim() !== trimmedChar) return false;
+      const entryCode = entry.pieceCode.trim().toUpperCase();
+      return !/^PIECE_[0-9A-F]{8,}$/i.test(entryCode);
+    });
+    if (catalogMatch) {
+      const catalogCode = resolveGamePieceCode(catalogMatch);
+      if (catalogCode && !/^PIECE_[0-9A-F]{8,}$/i.test(catalogCode)) {
+        return piece.promoted
+          ? (PROMOTED_CAPTURE_TO_HAND_CODE[catalogCode] ?? catalogCode)
+          : catalogCode;
+      }
+    }
+    const resolved = resolveGamePieceCode(def);
+    if (resolved && !/^PIECE_[0-9A-F]{8,}$/i.test(resolved)) return resolved;
   }
   return code;
 }
